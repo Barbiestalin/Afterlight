@@ -27,7 +27,8 @@ AfterlightMusic = AfterlightMusic or {}
 
 AfterlightMusic.path = "sound/afterlight/intro_music.mp3"
 
-AfterlightMusic.volume = 0.75
+AfterlightMusic.volume = math.Clamp(tonumber(cookie.GetString("afterlight_music_volume", "0.75")) or 0.75, 0, 1)
+AfterlightMusic.fadeFraction = 1
 AfterlightMusic.fadeTime = 3
 AfterlightMusic.checkInterval = 0.25
 
@@ -86,11 +87,16 @@ function AfterlightMusic:IsPaused()
 	return self:GetState() == GMOD_CHANNEL_PAUSED
 end
 
-function AfterlightMusic:SetVolume(volume)
-	self.volume = math.Clamp(volume or self.volume, 0, 1)
+-- transient: применить сразу, но записать cookie только после завершения жеста.
+function AfterlightMusic:SetVolume(volume, transient)
+	self.volume = math.Clamp(tonumber(volume) or self.volume, 0, 1)
 
 	if (self:IsChannelValid()) then
-		self.channel:SetVolume(self.volume)
+		self.channel:SetVolume(self.volume * (self.isFading and self.fadeFraction or 1))
+	end
+
+	if (!transient) then
+		cookie.Set("afterlight_music_volume", tostring(self.volume))
 	end
 end
 
@@ -197,9 +203,10 @@ function AfterlightMusic:FadeOut(fadeTime)
 	self.isFading = true
 
 	local channel = self.channel
-	local startVolume = channel:GetVolume()
+	local startFraction = self.volume > 0 and math.Clamp(channel:GetVolume() / self.volume, 0, 1) or 1
+	self.fadeFraction = startFraction
 	local startTime = CurTime()
-	local duration = fadeTime or self.fadeTime
+	local duration = math.max(fadeTime or self.fadeTime, 0.01)
 
 	timer.Remove("AfterlightMusicFadeOut")
 
@@ -224,9 +231,9 @@ function AfterlightMusic:FadeOut(fadeTime)
 		end
 
 		local progress = math.Clamp((CurTime() - startTime) / duration, 0, 1)
-		local volume = Lerp(progress, startVolume, 0)
+		self.fadeFraction = Lerp(progress, startFraction, 0)
 
-		channel:SetVolume(volume)
+		channel:SetVolume(self.volume * self.fadeFraction)
 
 		if (progress >= 1) then
 			channel:Stop()
@@ -378,7 +385,7 @@ timer.Create("AfterlightMusicController", AfterlightMusic.checkInterval, 0, func
 	local shouldPlay = AfterlightMusic:ShouldPlayNow()
 
 	if (shouldPlay) then
-		if (!AfterlightMusic:IsPlaying() and !AfterlightMusic.isLoading) then
+		if (AfterlightMusic.isFading or (!AfterlightMusic:IsPlaying() and !AfterlightMusic.isLoading)) then
 			AfterlightMusic:Play()
 		end
 	else

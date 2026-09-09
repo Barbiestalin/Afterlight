@@ -7,3 +7,4 @@ if (SERVER) then
 end
 
 ix.util.Include("cl_plugin.lua")
+ix.util.Include("cl_volume.lua")

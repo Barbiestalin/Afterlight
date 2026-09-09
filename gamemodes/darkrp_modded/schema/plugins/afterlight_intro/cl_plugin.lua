@@ -1090,6 +1090,12 @@ function INTRO:Open()
 	self.frame = frame
 	self.button = self:CreateButton(frame)
 
+	-- Дочерний контрол наследует видимость и AlphaTo заставки.
+	-- Watcher музыкального плагина также поддерживает позднюю загрузку плагинов.
+	if (AfterlightMusic and AfterlightMusic.AttachVolumeSlider) then
+		AfterlightMusic:AttachVolumeSlider(frame)
+	end
+
 	frame.OnKeyCodePressed = function(_, key)
 		if ((key == KEY_ESCAPE or key == KEY_SPACE or key == KEY_ENTER) and IsValid(INTRO.button) and INTRO.button:IsEnabled()) then
 			INTRO.button:DoClick()
