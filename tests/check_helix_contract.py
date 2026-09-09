@@ -226,6 +226,28 @@ def main() -> int:
             f'ix.util.Include("{name}")' in music_loader,
         )
 
+    button_src = read(os.path.join(PLUGINS, "afterlight_menu_music", "cl_volume_button.lua"))
+
+    # surface.DrawPoly рисует текущей текстурой: после draw.RoundedBox привязана
+    # текстура скругления с прозрачным углом, и полигоны с ней невидимы в игре.
+    # Поэтому внутри Paint перед первой отрисовкой полигонов текстура обязана
+    # быть сброшена (helpers DrawArc/DrawBar выше по файлу вызываются после).
+    paint_pos = button_src.find("function PANEL:Paint")
+    no_texture = button_src.find("draw.NoTexture()", paint_pos)
+    first_poly = button_src.find("surface.DrawPoly(", paint_pos)
+
+    report.check(
+        "иконка сбрасывает текстуру (draw.NoTexture) до первого surface.DrawPoly в Paint",
+        paint_pos != -1 and no_texture != -1 and first_poly != -1 and no_texture < first_poly,
+    )
+    for name in ("cl_volume.lua", "cl_volume_button.lua"):
+        report.check(
+            f"{name} не показывает всплывающих аннотаций",
+            "SetTooltip" not in strip_comments(
+                read(os.path.join(PLUGINS, "afterlight_menu_music", name))
+            ),
+        )
+
     print("\n== чего в Helix нет ==")
 
     everything = ""

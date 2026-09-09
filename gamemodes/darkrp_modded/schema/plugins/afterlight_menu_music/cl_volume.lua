@@ -70,7 +70,6 @@ function PANEL:Init()
 	self:SetMouseInputEnabled(false)
 	self:SetKeyboardInputEnabled(false)
 	self:SetCursor("hand")
-	self:SetTooltip("Громкость музыки • перетаскивание или колесо мыши")
 
 	self.dragging = false
 	self.emphasis = 0

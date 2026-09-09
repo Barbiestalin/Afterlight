@@ -509,13 +509,29 @@ local surface = {}
 
 local surfaceNoOp = {
 	"SetDrawColor", "DrawRect", "DrawLine", "DrawTexturedRect", "DrawTexturedRectUV",
-	"DrawTexturedRectRotated", "SetMaterial", "SetTexture", "SetFont", "SetTextColor",
-	"SetTextPos", "DrawText", "DrawPoly", "PlaySound", "GetTextureID", "CreateFont",
+	"DrawTexturedRectRotated", "SetMaterial", "SetFont", "SetTextColor",
+	"SetTextPos", "DrawText", "PlaySound", "GetTextureID", "CreateFont",
 	"SetAlphaMultiplier", "DisableClipping", "SetScissorRect"
 }
 
 for _, name in ipairs(surfaceNoOp) do
 	surface[name] = function() end
+end
+
+-- surface.DrawPoly в настоящем GMod рисует ТЕКСТУРИРУЕМЫЙ полигон текущей
+-- текстурой. Если в момент вызова привязана текстура (например, осталась после
+-- draw.RoundedBox), полигон семплит один её тексель и на экране невидим —
+-- именно так выглядела «пустая» иконка в игре. Модель повторяет это: полигон
+-- считается нарисованным, только когда текстура сброшена (draw.NoTexture или
+-- surface.SetTexture() без аргумента).
+local boundTexture = 0
+
+function surface.SetTexture(id)
+	boundTexture = id or 0
+end
+
+function surface.DrawPoly(vertices)
+	drawLog[#drawLog + 1] = {type = "Poly", vertices = vertices, drawn = boundTexture == 0}
 end
 
 function surface.GetTextSize(text)
@@ -528,6 +544,10 @@ local draw = {}
 
 function draw.RoundedBox(corner, x, y, w, h, color)
 	drawLog[#drawLog + 1] = {type = "RoundedBox", x = x, y = y, w = w, h = h, color = color}
+
+	-- Как в настоящем GMod: после RoundedBox привязана текстура скругления, и
+	-- последующие DrawPoly без сброса текстуры были бы невидимы.
+	boundTexture = 1001
 end
 
 function draw.RoundedBoxEx(corner, x, y, w, h, color)
@@ -541,6 +561,7 @@ function draw.SimpleText(text, font, x, y, color, alignX, alignY)
 end
 
 function draw.NoTexture()
+	boundTexture = 0
 end
 
 function draw.GetFontHeight()

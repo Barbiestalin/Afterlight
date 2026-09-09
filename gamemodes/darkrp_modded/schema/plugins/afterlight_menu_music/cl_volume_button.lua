@@ -160,7 +160,6 @@ function PANEL:Init()
 	self:SetMouseInputEnabled(true)
 	self:SetKeyboardInputEnabled(false)
 	self:SetCursor("hand")
-	self:SetTooltip("Громкость музыки • клик — показать или скрыть полосу")
 
 	self.emphasis = 0
 	self.appear = 0
@@ -274,6 +273,10 @@ function PANEL:Paint(w, h)
 	local coneX = cx + w * 0.16
 
 	surface.SetDrawColor(215, 202, 191, ink)
+
+	-- Без сброса текстуры полигоны рисовались бы «остатком» текстуры
+	-- скруглённого прямоугольника от draw.RoundedBox и в игре были бы невидимы.
+	draw.NoTexture()
 
 	-- Корпус динамика: прямоугольник сразу переходит в раструб.
 	surface.DrawPoly({

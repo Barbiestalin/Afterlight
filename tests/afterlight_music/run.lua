@@ -420,34 +420,46 @@ check("средне — две дуги", MUSIC:GetVolumeBands() == 2, MUSIC:Get
 MUSIC:SetVolume(0.75)
 check("громко — три дуги", MUSIC:GetVolumeBands() == 3, MUSIC:GetVolumeBands())
 
--- Иконка действительно рисуется: считаем четырёхугольники за один Paint.
-local realDrawPoly = env.surface.DrawPoly
-local polyCalls = 0
-
+-- Иконка действительно рисуется: считаем полигоны за один Paint в журнале
+-- отрисовки. Модель помечает полигон видимым, только если перед ним сброшена
+-- текстура — иначе в настоящем GMod он был бы невидим.
 local function paintButton()
-	polyCalls = 0
-
-	env.surface.DrawPoly = function(...)
-		polyCalls = polyCalls + 1
-
-		return realDrawPoly(...)
-	end
+	local log = env.__drawLog
+	local from = #log + 1
 
 	button:Paint(button:GetWide(), button:GetTall())
-	env.surface.DrawPoly = realDrawPoly
 
-	return polyCalls
+	local polys, drawn = 0, 0
+
+	for i = from, #log do
+		if (log[i].type == "Poly") then
+			polys = polys + 1
+
+			if (log[i].drawn) then
+				drawn = drawn + 1
+			end
+		end
+	end
+
+	return polys, drawn
 end
 
-local loudPolys = paintButton()
+check("иконка без всплывающей аннотации", button.m_tooltip == nil, button.m_tooltip)
+check("полоса без всплывающей аннотации", slider.m_tooltip == nil, slider.m_tooltip)
+
+local loudPolys, loudDrawn = paintButton()
 
 check("громкая иконка рисуется корпусом и дугами", loudPolys >= 31, loudPolys)
+check("все полигоны иконки видимы (текстура сброшена)", loudDrawn == loudPolys,
+	loudDrawn .. "/" .. loudPolys)
 
 MUSIC:SetVolume(0)
 
-local mutePolys = paintButton()
+local mutePolys, muteDrawn = paintButton()
 
 check("при нулевой громкости дуг нет", mutePolys < loudPolys, mutePolys)
+check("перечёркивание видимо", muteDrawn == mutePolys and mutePolys == 2,
+	muteDrawn .. "/" .. mutePolys)
 
 MUSIC:SetVolume(0.75)
 
