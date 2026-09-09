@@ -400,13 +400,17 @@ frame(1.2)
 
 check("затухание началось", MUSIC.envelope < 0.99, MUSIC.envelope)
 
+-- позиция, на которой трек играл до полного затухания — с ней сравним запуск
+local playedBeforeFade = MUSIC.channel:GetTime()
+
 frame(4)
 
 check("огибающая дошла до нуля", MUSIC.envelope == 0, MUSIC.envelope)
 check("канал поставлен на паузу, а не уничтожен",
 	MUSIC.channel == channelBefore and MUSIC.channel:GetState() == env.GMOD_CHANNEL_PAUSED,
 	MUSIC.channel:GetState())
-check("позиция трека сохранена", MUSIC.channel:GetTime() > 1, MUSIC.channel:GetTime())
+check("после полного затухания трек перемотан в начало",
+	MUSIC.channel:GetTime() < 0.01, MUSIC.channel:GetTime())
 check("ползунок исчез вместе с меню", countSliders() == 0, countSliders())
 check("панель меню персонажей удалена", not env.IsValid(env.ix.gui.characterMenu))
 
@@ -414,9 +418,7 @@ check("панель меню персонажей удалена", not env.IsVal
 -- 8. ИГРОВОЕ МЕНЮ HELIX (TAB)
 -- =========================================================
 
-section("игровое меню Helix (TAB)")
-
-local pausedTime = MUSIC.channel:GetTime()
+section("игровое меню Helix (TAB) после полного затухания — запуск заново")
 
 env.hook.Run("ScoreboardShow")
 frame(0.2)
@@ -425,10 +427,12 @@ local menu = env.ix.gui.menu
 
 check("ixMenu создан", env.IsValid(menu))
 check("контекст menu активен", MUSIC:IsContextActive(MUSIC.CONTEXT_MENU))
-check("трек продолжился с той же позиции", MUSIC.channel == channelBefore)
+check("канал тот же, без пересоздания", MUSIC.channel == channelBefore)
 check("новый канал не создавался", #env.__state.channels == 2, #env.__state.channels)
 check("пауза снята", MUSIC.channel:GetState() == env.GMOD_CHANNEL_PLAYING)
-check("позиция не сброшена", MUSIC.channel:GetTime() >= pausedTime, MUSIC.channel:GetTime())
+check("музыка стартовала с начала, а не с прежнего места",
+	MUSIC.channel:GetTime() < 1 and MUSIC.channel:GetTime() < playedBeforeFade,
+	MUSIC.channel:GetTime())
 check("ползунок в игровом меню", MUSIC.slider ~= nil and MUSIC.slider:GetParent() == menu)
 
 if (env.IsValid(MUSIC.slider) and env.IsValid(menu)) then

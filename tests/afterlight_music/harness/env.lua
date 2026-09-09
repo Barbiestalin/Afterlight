@@ -775,14 +775,9 @@ channelMeta.__index = channelMeta
 local channelIndex = 0
 
 function channelMeta:Play()
-	if (self.state != env.GMOD_CHANNEL_STOPPED) then
-		self.state = env.GMOD_CHANNEL_PLAYING
-
-		return
-	end
-
-	self.state = env.GMOD_CHANNEL_PLAYING
+	-- Возобновление учитывает текущий курсор (в т.ч. после SetTime на паузе).
 	self.startTime = clock.time - self.time
+	self.state = env.GMOD_CHANNEL_PLAYING
 end
 
 function channelMeta:Stop()
