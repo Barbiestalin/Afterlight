@@ -64,8 +64,10 @@ Helix (ixIntro) заводят свои каналы self.channel; контро�
     (gamemode/core/libs/sh_character.lua).
   * OnCharacterDisconnect объявлен только на сервере
     (gamemode/core/hooks/sv_hooks.lua) — на клиенте его нет.
-  * Из папки плагина Helix грузит только sh_plugin.lua, остальные файлы плагин
-    подключает сам через ix.util.Include (gamemode/core/libs/sh_plugin.lua).
+  * Из корня папки плагина Helix сам грузит только sh_plugin.lua (папки libs и
+    derma он подключает до него), поэтому файлы в корне плагина — cl_volume.lua
+    и cl_volume_button.lua — подключаются явно через ix.util.Include
+    (gamemode/core/libs/sh_plugin.lua).
 
 Иконка и полоса громкости
 -------------------------

@@ -26,9 +26,10 @@ bash tests/run_checks.sh
   поэтому контроллер их глушит;
 * `ixIntro:Remove(bForce)` без флага не убирает панель сразу, а только начинает
   анимацию закрытия;
-* из папки плагина Helix грузит только `sh_plugin.lua`, а `cl_`-файлы плагин
-  подключает сам через `ix.util.Include` — поэтому проверяется, что
-  `cl_plugin.lua`, `cl_volume.lua` и `cl_volume_button.lua` подключены.
+* из корня папки плагина Helix сам грузит только `sh_plugin.lua`, а папки `libs`
+  и `derma` подключает до него — файлы в корне плагин подключает сам через
+  `ix.util.Include`, поэтому проверяется, что `cl_plugin.lua`, `cl_volume.lua`
+  и `cl_volume_button.lua` подключены.
 
 Отдельно проверяется, что дословные фрагменты из
 `afterlight_music/harness/snippets.lua` по-прежнему совпадают с указанными

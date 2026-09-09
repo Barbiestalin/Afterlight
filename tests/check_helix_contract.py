@@ -267,9 +267,16 @@ def main() -> int:
 
     plugin_lib = source("gamemode/core/libs/sh_plugin.lua")
     report.check(
-        "из папки плагина грузится только sh_plugin.lua",
+        "из корня папки плагина сам грузится только sh_plugin.lua",
         'ix.util.Include(isSingleFile and path or path.."/sh_"..variable:lower()..".lua", "shared")'
         in plugin_lib,
+    )
+    report.check(
+        "папки libs и derma плагина Helix подключает сам, до sh_plugin.lua",
+        'ix.util.IncludeDir(path.."/libs", true)' in plugin_lib
+        and 'ix.util.IncludeDir(path.."/derma", true)' in plugin_lib
+        and plugin_lib.index('ix.util.IncludeDir(path.."/derma", true)')
+        < plugin_lib.index('ix.util.Include(isSingleFile and path'),
     )
     report.check(
         "cl_-файлы плагин подключает сам",
