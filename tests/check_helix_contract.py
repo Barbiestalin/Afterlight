@@ -165,6 +165,21 @@ def main() -> int:
         "if (!IsValid(ix.gui.intro)) then" in character,
     )
 
+    intro_panel = source("gamemode/core/derma/cl_intro.lua")
+    report.check(
+        "ixIntro:Remove(bForce) без флага лишь начинает анимацию закрытия",
+        re.search(
+            r"function PANEL:Remove\(bForce\)\s*if \(bForce\) then\s*BaseClass\.Remove\(self\)",
+            intro_panel,
+        )
+        is not None
+        and "self.bClosing = true" in intro_panel,
+    )
+    report.check(
+        "заставка Helix заводит собственный музыкальный канал",
+        "self.channel = channel" in intro_panel and "sound/helix/intro.mp3" in intro_panel,
+    )
+
     hooks = source("gamemode/core/hooks/cl_hooks.lua")
     report.check(
         "GM:ScoreboardShow создаёт ixMenu",
@@ -198,6 +213,18 @@ def main() -> int:
         and 'hook.Run("OnCharacterDisconnect"' not in character_lib
         and 'hook.Run("OnCharacterDisconnect"' not in hooks,
     )
+
+    print("\n== сборка плагина ==")
+
+    music_loader = read(os.path.join(PLUGINS, "afterlight_menu_music", "sh_plugin.lua"))
+
+    # Загрузчик Helix исполняет только sh_plugin.lua, поэтому каждый клиентский
+    # файл плагина должен быть подключён явно.
+    for name in ("cl_plugin.lua", "cl_volume.lua", "cl_volume_button.lua"):
+        report.check(
+            f"sh_plugin.lua подключает {name}",
+            f'ix.util.Include("{name}")' in music_loader,
+        )
 
     print("\n== чего в Helix нет ==")
 

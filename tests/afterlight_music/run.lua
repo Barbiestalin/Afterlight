@@ -100,7 +100,8 @@ local pluginRoot = normalize(root .. "../../gamemodes/darkrp_modded/schema/plugi
 local pluginFiles = {
 	"afterlight_intro/cl_plugin.lua",
 	"afterlight_menu_music/cl_plugin.lua",
-	"afterlight_menu_music/cl_volume.lua"
+	"afterlight_menu_music/cl_volume.lua",
+	"afterlight_menu_music/cl_volume_button.lua"
 }
 
 local function loadPlugins()
@@ -164,6 +165,18 @@ local function countSliders()
 	return total
 end
 
+local function countButtons()
+	local total = 0
+
+	for _, panel in ipairs(env.__state.panels) do
+		if (panel.ClassName == "AfterlightMusicVolumeButton") then
+			total = total + 1
+		end
+	end
+
+	return total
+end
+
 local function countHooks(name)
 	local total = 0
 
@@ -218,6 +231,8 @@ check("контроллер AfterlightMusic создан", type(MUSIC) == "table
 check("громкость по умолчанию 75%", math.abs(MUSIC.volume - 0.75) < 0.001, MUSIC.volume)
 check("канал ещё не создан", MUSIC.channel == nil)
 check("ползунка нет, пока нет интерфейса", countSliders() == 0)
+check("иконки громкости нет, пока нет интерфейса", countButtons() == 0, countButtons())
+check("полоса громкости закрыта по умолчанию", MUSIC.bBarOpen == false)
 check("хук Think один", countHooks("Think") == 1, countHooks("Think"))
 check("панель ixCharMenu зарегистрирована", env.__classes.ixCharMenu ~= nil)
 check("панель ixMenu зарегистрирована", env.__classes.ixMenu ~= nil)
@@ -298,15 +313,55 @@ MUSIC:SetVolume(0.75)
 check("громкость возвращена", math.abs(MUSIC.volume - 0.75) < 0.001, MUSIC.volume)
 
 -- =========================================================
--- 4. ПЕРЕТАСКИВАНИЕ И КОЛЕСО
+-- 4. ИКОНКА ГРОМКОСТИ И ПОЛОСА
 -- =========================================================
 
-section("ползунок: перетаскивание и колесо")
+section("иконка громкости и полоса")
 
+local button = MUSIC.button
 slider = MUSIC.slider
+
+check("иконка появилась вместе с заставкой", env.IsValid(button))
+check("иконка одна", countButtons() == 1, countButtons())
+check("иконка живёт в заставке", button:GetParent() == env.AfterlightIntro.frame)
+check("иконка квадратная", button:GetWide() == button:GetTall(), button:GetWide())
+
+local buttonX, buttonY = button:LocalToScreen(0, 0)
+
+check("иконка в правом нижнем углу экрана", buttonX == 1853 and buttonY == 1012,
+	buttonX .. "," .. buttonY)
+
+-- Пока иконку не нажали, полосы в углу нет и нажатия она не ловит.
+check("полоса по умолчанию скрыта", slider.open < 0.05 and MUSIC.bBarOpen == false, slider.open)
+check("скрытая полоса не принимает мышь", slider:IsMouseInputEnabled() == false)
+
+local volumeBeforeClick = MUSIC.volume
+local hiddenX, hiddenY = slider:LocalToScreen(0, 0)
+
+pressAt(hiddenX + 20, hiddenY + 20, slider)
+
+check("клик по скрытой полосе громкость не меняет",
+	math.abs(MUSIC.volume - volumeBeforeClick) < 0.001, MUSIC.volume)
+check("и перетаскивание не начинает", slider.dragging == false)
+
+pressAt(buttonX + 22, buttonY + 22, button)
+
+check("клик по иконке открыл полосу", MUSIC.bBarOpen == true)
+
+frame(0.5)
+
+check("полоса проявилась", slider.open > 0.99, slider.open)
+check("полосу можно трогать", slider:IsInteractive() == true)
+
 local sliderX, sliderY = slider:LocalToScreen(0, 0)
 local inset = math.floor(slider:GetWide() * 0.06)
 local trackWidth = slider:GetWide() - inset * 2
+
+check("полоса над иконкой, по её правому краю",
+	sliderX == buttonX + button:GetWide() - slider:GetWide()
+		and sliderY + slider:GetTall() < buttonY,
+	sliderX .. "," .. sliderY .. " / " .. buttonX .. "," .. buttonY)
+check("геометрия на 1920x1080", sliderX == 1686 and sliderY == 955, sliderX .. "," .. sliderY)
 
 local writesBefore = cookieWrites
 
@@ -329,6 +384,84 @@ slider:OnMouseWheeled(1)
 check("колесо увеличивает громкость", MUSIC.volume > volumeBefore, MUSIC.volume)
 slider:OnMouseWheeled(-1)
 check("колесо уменьшает громкость", math.abs(MUSIC.volume - volumeBefore) < 0.001, MUSIC.volume)
+
+-- Повторный клик по иконке убирает полосу обратно.
+pressAt(buttonX + 22, buttonY + 22, button)
+
+check("повторный клик скрыл полосу", MUSIC.bBarOpen == false)
+
+frame(0.5)
+
+check("полоса погасла", slider.open < 0.01, slider.open)
+check("полоса снова не принимает мышь", slider:IsMouseInputEnabled() == false)
+
+-- Колесо прямо на иконке: громкость меняется, полоса показывается.
+volumeBefore = MUSIC.volume
+
+button:OnMouseWheeled(1)
+
+check("колесо на иконке меняет громкость", MUSIC.volume > volumeBefore, MUSIC.volume)
+check("колесо на иконке показывает полосу", MUSIC.bBarOpen == true)
+
+button:OnMouseWheeled(-1)
+
+check("громкость вернулась", math.abs(MUSIC.volume - volumeBefore) < 0.001, MUSIC.volume)
+
+-- Число дуг иконки соответствует уровню громкости.
+MUSIC:SetVolume(0)
+check("нулевая громкость — иконка перечёркнута", MUSIC:GetVolumeBands() == 0, MUSIC:GetVolumeBands())
+
+MUSIC:SetVolume(0.2)
+check("тихо — одна дуга", MUSIC:GetVolumeBands() == 1, MUSIC:GetVolumeBands())
+
+MUSIC:SetVolume(0.5)
+check("средне — две дуги", MUSIC:GetVolumeBands() == 2, MUSIC:GetVolumeBands())
+
+MUSIC:SetVolume(0.75)
+check("громко — три дуги", MUSIC:GetVolumeBands() == 3, MUSIC:GetVolumeBands())
+
+-- Иконка действительно рисуется: считаем четырёхугольники за один Paint.
+local realDrawPoly = env.surface.DrawPoly
+local polyCalls = 0
+
+local function paintButton()
+	polyCalls = 0
+
+	env.surface.DrawPoly = function(...)
+		polyCalls = polyCalls + 1
+
+		return realDrawPoly(...)
+	end
+
+	button:Paint(button:GetWide(), button:GetTall())
+	env.surface.DrawPoly = realDrawPoly
+
+	return polyCalls
+end
+
+local loudPolys = paintButton()
+
+check("громкая иконка рисуется корпусом и дугами", loudPolys >= 31, loudPolys)
+
+MUSIC:SetVolume(0)
+
+local mutePolys = paintButton()
+
+check("при нулевой громкости дуг нет", mutePolys < loudPolys, mutePolys)
+
+MUSIC:SetVolume(0.75)
+
+-- Полоса убирается сама, если к ней не возвращаться.
+local idleBefore = MUSIC.barIdleTime
+MUSIC.barIdleTime = 1
+
+env.__setCursor(960, 540)
+frame(1.4)
+
+check("полоса закрылась сама после простоя", MUSIC.bBarOpen == false)
+check("жест на полосе при этом закончен", slider.dragging == false)
+
+MUSIC.barIdleTime = idleBefore
 
 -- =========================================================
 -- 5. МЕНЮ ПЕРСОНАЖЕЙ ПОЯВЛЯЕТСЯ ВО ВРЕМЯ ЗАСТАВКИ
@@ -507,6 +640,7 @@ check("ixMenu закрывается", menu.bClosing == true)
 check("трек не останавливался", MUSIC.envelope >= envelopeBefore, MUSIC.envelope)
 check("канал не пересоздан", MUSIC.channel == channelBefore)
 check("ползунок уходит вместе со своим меню", MUSIC.slider ~= nil and MUSIC.slider:GetParent() == menu)
+check("иконка уходит вместе со своим меню", MUSIC.button ~= nil and MUSIC.button:GetParent() == menu)
 
 frame(0.2)
 
@@ -521,6 +655,11 @@ check("ползунок переехал в меню персонажей", MUSI
 check("ползунок один", countSliders() == 1, countSliders())
 check("ползунок снова виден", MUSIC.slider ~= nil and MUSIC.slider.appear > 0.9,
 	MUSIC.slider and MUSIC.slider.appear)
+check("иконка переехала в меню персонажей", MUSIC.button ~= nil
+	and MUSIC.button:GetParent() == env.ix.gui.characterMenu)
+check("иконка одна", countButtons() == 1, countButtons())
+check("иконка снова видна", MUSIC.button ~= nil and MUSIC.button.appear > 0.9,
+	MUSIC.button and MUSIC.button.appear)
 
 -- =========================================================
 -- 10. ЗАКРЫТИЕ ИНТЕРФЕЙСА ВО ВРЕМЯ ПЕРЕТАСКИВАНИЯ
@@ -529,6 +668,11 @@ check("ползунок снова виден", MUSIC.slider ~= nil and MUSIC.sl
 section("перетаскивание при закрытии интерфейса")
 
 slider = MUSIC.slider
+
+-- Скрытая полоса на нажатия не откликается, поэтому сначала её раскрываем.
+MUSIC:SetVolumeBar(true)
+frame(0.5)
+
 local x, y = slider:LocalToScreen(0, 0)
 
 pressAt(x + slider:GetWide() * 0.5, y + slider:GetTall() * 0.5, slider)
@@ -556,6 +700,7 @@ check("канал пережил перезагрузку", env.AfterlightMusic.
 check("громкость сохранилась", math.abs(env.AfterlightMusic.volume - volumeBeforeRefresh) < 0.001,
 	env.AfterlightMusic.volume)
 check("ползунок не задублировался", countSliders() <= 1, countSliders())
+check("иконка не задублировалась", countButtons() <= 1, countButtons())
 check("хук Think по-прежнему один", countHooks("Think") == 1, countHooks("Think"))
 check("старые таймеры предыдущей версии сняты",
 	not env.timer.Exists("AfterlightMusicController") and not env.timer.Exists("AfterlightMusicFadeOut"))
@@ -603,6 +748,30 @@ end
 
 check("играет не больше одного канала", countChannels(env.GMOD_CHANNEL_PLAYING) <= 1,
 	countChannels(env.GMOD_CHANNEL_PLAYING))
+
+-- =========================================================
+-- 14. ИНТЕРФЕЙС ЗАКРЫТ — КОНТРОЛЫ УБРАНЫ
+-- =========================================================
+
+section("интерфейс закрыт")
+
+-- ixIntro:Remove(bForce) без флага лишь начинает анимацию закрытия
+-- (gamemode/core/derma/cl_intro.lua), поэтому снимаем панель принудительно.
+if (env.IsValid(env.ix.gui.intro)) then
+	env.ix.gui.intro:Remove(true)
+end
+
+MUSIC:ClearContexts()
+frame(1)
+
+local status = MUSIC:GetStatus()
+
+check("заставки Helix больше нет", not env.IsValid(env.ix.gui.intro))
+check("иконка убрана вместе с интерфейсом", countButtons() == 0, countButtons())
+check("полоса убрана вместе с интерфейсом", countSliders() == 0, countSliders())
+check("состояние контроллера это отражает",
+	status.button == false and status.slider == false,
+	tostring(status.button) .. "/" .. tostring(status.slider))
 
 -- =========================================================
 -- ИТОГ

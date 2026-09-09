@@ -26,6 +26,10 @@ if (!CLIENT) then return end
 	    (gamemode/core/libs/sh_character.lua, net.Receive("ixCharacterLoaded")).
 	  * Меню персонажей и заставка Helix заводят собственные каналы
 	    (self.channel), поэтому контроллер глушит их и остаётся один источник.
+
+	Громкость одна на все экраны и меняется полосой из cl_volume.lua; сама
+	полоса скрыта и вызывается кликом по иконке динамика в правом нижнем углу
+	экрана (cl_volume_button.lua).
 ]]
 
 -- Сохраняем канал и громкость при lua_refresh, чтобы трек не перезапускался.
@@ -124,6 +128,7 @@ concommand.Remove("afterlight_music_stop")
 concommand.Remove("afterlight_music_fade")
 concommand.Remove("afterlight_music_status")
 concommand.Remove("afterlight_music_volume")
+concommand.Remove("afterlight_music_bar")
 
 -- =========================================================
 -- ГРОМКОСТЬ
@@ -474,7 +479,10 @@ function MUSIC:GetStatus()
 		menu = self:IsMenuOpen(),
 		intro = AfterlightIntro and (AfterlightIntro.active or AfterlightIntro.closing) and true or false,
 		slider = IsValid(self.slider),
-		sliderHost = self.sliderHost
+		sliderHost = self.sliderHost,
+		-- Иконка громкости и состояние полосы (см. cl_volume_button.lua).
+		button = IsValid(self.button),
+		barOpen = self.bBarOpen == true
 	}
 end
 
@@ -527,5 +535,6 @@ concommand.Add("afterlight_music_status", function()
 
 	print("character menu:", status.characterMenu, "helix menu:", status.menu, "intro:", status.intro)
 	print("slider:", status.slider, "host:", status.sliderHost)
+	print("volume button:", status.button, "bar open:", status.barOpen)
 	print("============================================")
 end)
