@@ -429,27 +429,32 @@ local function paintButton()
 
 	button:Paint(button:GetWide(), button:GetTall())
 
-	local polys, drawn = 0, 0
+	local polys, drawn, plateAlpha = 0, 0, nil
 
 	for i = from, #log do
-		if (log[i].type == "Poly") then
+		local entry = log[i]
+
+		if (entry.type == "Poly") then
 			polys = polys + 1
 
-			if (log[i].drawn) then
+			if (entry.drawn) then
 				drawn = drawn + 1
 			end
+		elseif (entry.type == "RoundedBox") then
+			plateAlpha = entry.color.a
 		end
 	end
 
-	return polys, drawn
+	return polys, drawn, plateAlpha
 end
 
 check("иконка без всплывающей аннотации", button.m_tooltip == nil, button.m_tooltip)
 check("полоса без всплывающей аннотации", slider.m_tooltip == nil, slider.m_tooltip)
 
-local loudPolys, loudDrawn = paintButton()
+local loudPolys, loudDrawn, loudPlate = paintButton()
 
-check("громкая иконка рисуется корпусом и дугами", loudPolys >= 31, loudPolys)
+check("иконка непрозрачна в покое", loudPlate >= 60, loudPlate)
+check("громкая иконка рисуется корпусом и дугами", loudPolys == 32, loudPolys)
 check("все полигоны иконки видимы (текстура сброшена)", loudDrawn == loudPolys,
 	loudDrawn .. "/" .. loudPolys)
 
@@ -458,7 +463,7 @@ MUSIC:SetVolume(0)
 local mutePolys, muteDrawn = paintButton()
 
 check("при нулевой громкости дуг нет", mutePolys < loudPolys, mutePolys)
-check("перечёркивание видимо", muteDrawn == mutePolys and mutePolys == 2,
+check("перечёркивание видимо", muteDrawn == mutePolys and mutePolys == 3,
 	muteDrawn .. "/" .. mutePolys)
 
 MUSIC:SetVolume(0.75)
