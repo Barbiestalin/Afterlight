@@ -22,6 +22,11 @@ function ROW:Init()
 		dot.DoClick = function(button)
 			if (IsValid(self.sheet)) then self.sheet:RequestValue(self.definition.id, button.index) end
 		end
+		dot.DoRightClick = function(button)
+			if (ix.vtm.descriptions and ix.vtm.descriptions.OpenTip) then
+				ix.vtm.descriptions.OpenTip("stats", self.definition.id, button.index, self.sheet)
+			end
+		end
 		dot.Paint = function(button, w, h)
 			local active = button.index <= self.value
 			local temporary = active and button.afterlightTemporary == true
@@ -88,6 +93,11 @@ function DISCIPLINE_ROW:Init()
 		dot.DoClick = function(button)
 			if (IsValid(self.sheet)) then
 				self.sheet:RequestDisciplineValue(self.definition.id, button.index)
+			end
+		end
+		dot.DoRightClick = function(button)
+			if (ix.vtm.descriptions and ix.vtm.descriptions.OpenTip) then
+				ix.vtm.descriptions.OpenTip("disciplines", self.definition.id, button.index, self.sheet)
 			end
 		end
 		dot.Paint = function(panel, w, h)
