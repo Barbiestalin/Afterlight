@@ -48,7 +48,9 @@ function panel_meta:GetWide() return self._wide or 0 end
 function panel_meta:SetTall(h) self._tall = h end
 function panel_meta:GetTall() return self._tall or 0 end
 function panel_meta:SetPos(x, y) self._x, self._y = x, y end
-function panel_meta:InvalidateLayout() end
+function panel_meta:InvalidateLayout()
+	if (self.PerformLayout) then self.PerformLayout(self) end
+end
 function panel_meta:Remove() self._removed = true end
 
 local registry = {}
@@ -92,7 +94,10 @@ local function make_guard()
 	scroll.LocalToScreen = function(_, x, y) return x, y end
 	scroll.GetWide = function() return 900 end
 	scroll.GetTall = function() return 500 end
+	scroll.GetParent = function() return nil end
+	scroll.LocalToScreen = scroll.LocalToScreen or function(_, x, y) return x, y end
 	guard.GetParent = function() return scroll end
+	guard.LocalToScreen = guard.LocalToScreen or function(_, x, y) return x, y end
 	guard.Add = function(_, class) return vgui.Create(class) end
 	guard.ScreenToLocal = function(_, x, y) return x, y end
 	guard.GetWide = function() return 1000 end
@@ -123,6 +128,25 @@ end
 
 -- Несуществующая запись не должна падать.
 try("stats", "no_such_stat", 3)
+
+-- Клик у нижнего края видимого окна: тултип обязан раскрыться вверх и
+-- целиком остаться в видимой области (0,0,900,500 по заглушкам).
+gui.MousePos = function() return 400, 470 end
+ix.vtm.descriptions.OpenTip("disciplines", "dominate", 2, guard)
+local tip = ix.vtm.descriptions.lastTip
+if (not tip or not tip._y) then
+	io.write("FAIL: тултип не создан или не спозиционирован\n")
+	os.exit(1)
+end
+if (tip._y > 470) then
+	io.write("FAIL: тултип не раскрылся вверх, y=" .. tostring(tip._y) .. "\n")
+	os.exit(1)
+end
+if (tip._y + tip:GetTall() > 500 - 4) then
+	io.write("FAIL: тултип выходит за видимое окно, y=" .. tostring(tip._y) .. "\n")
+	os.exit(1)
+end
+io.write("flip ok: y=" .. tip._y .. ", tall=" .. tip:GetTall() .. "\n")
 
 io.write(string.format("Тултипов открыто: %d, провалено: %d\n", opened, failed))
 if (failed > 0) then os.exit(1) end

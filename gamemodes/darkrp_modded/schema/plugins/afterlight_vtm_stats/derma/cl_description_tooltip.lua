@@ -83,13 +83,23 @@ local currentTip
 -- поэтому тултип обязан жить внутри того же поддерева, что и лист: крепим его
 -- к самой панели листа. Тогда он рисуется в том же проходе поверх строк листа
 -- и в окне персонажа, и в создании персонажа, и в админ-листе.
-local function FindScrollAncestor(panel)
+-- Лист живёт в вручную рисуемом поддереве меню и может быть обрезан любым
+-- предком (субпанель меню, скролл и т.п.). Видимая область = пересечение
+-- границ всех предков, переведённое в координаты листа.
+local function VisibleRect(panel)
+	local x1, y1 = panel:LocalToScreen(0, 0)
+	local x2, y2 = panel:LocalToScreen(panel:GetWide(), panel:GetTall())
 	local parent = panel:GetParent()
 	while (IsValid(parent)) do
-		if (parent.GetVBar) then return parent end
+		local px1, py1 = parent:LocalToScreen(0, 0)
+		local px2, py2 = parent:LocalToScreen(parent:GetWide(), parent:GetTall())
+		x1, y1 = math.max(x1, px1), math.max(y1, py1)
+		x2, y2 = math.min(x2, px2), math.min(y2, py2)
 		parent = parent:GetParent()
 	end
-	return nil
+	local vx1, vy1 = panel:ScreenToLocal(x1, y1)
+	local vx2, vy2 = panel:ScreenToLocal(x2, y2)
+	return vx1, vy1, vx2 - vx1, vy2 - vy1
 end
 
 -- kind: "stats" | "disciplines"; guard — панель листа, владеющая тултипом.
@@ -109,15 +119,7 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	tip.guard = guard
 	tip:SetContent(string.format("%s — уровень %d: %s", subjectName, level, name), text)
 
-	-- Лист обычно выше видимой области скролла: ограничиваем тултип именно
-	-- видимым окном, а при нехватке места снизу — раскрываем вверх от курсора.
-	local viewX, viewY, viewW, viewH = 0, 0, guard:GetWide(), guard:GetTall()
-	local scroll = FindScrollAncestor(guard)
-	if (scroll) then
-		viewX, viewY = guard:ScreenToLocal(scroll:LocalToScreen(0, 0))
-		viewW, viewH = scroll:GetWide(), scroll:GetTall()
-	end
-
+	local viewX, viewY, viewW, viewH = VisibleRect(guard)
 	local mx, my = gui.MousePos()
 	local lx, ly = guard:ScreenToLocal(mx, my)
 	local w, h = tip:GetWide(), tip:GetTall()
@@ -129,4 +131,5 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	y = math.Clamp(y, viewY + 4, math.max(viewY + viewH - h - 4, viewY + 4))
 	tip:SetPos(x, y)
 	currentTip = tip
+	ix.vtm.descriptions.lastTip = tip
 end
