@@ -2,11 +2,20 @@ if (!CLIENT) then return end
 
 --[[
 	Afterlight Intro
-	Клиентская заставка. Не создаёт собственный музыкальный канал:
-	она сохраняет существующий контракт с глобальным AfterlightMusic.
+	Клиентская заставка. Музыкой заведует общий контроллер AfterlightMusic
+	(плагин afterlight_menu_music): интро не создаёт собственный канал и не
+	трогает громкость, а только сообщает контроллеру, что ему нужен звук.
 --]]
 
 local INTRO = {}
+
+-- Единственная точка связи заставки с музыкой. Контроллер может быть ещё не
+-- загружен или вовсе отключён, поэтому обращение защищено.
+local function SetMusicContext(bActive)
+	if (AfterlightMusic and AfterlightMusic.SetContext) then
+		AfterlightMusic:SetContext(AfterlightMusic.CONTEXT_INTRO or "intro", bActive)
+	end
+end
 
 INTRO.title = "AFTERLIGHT"
 INTRO.subtitle = "Хроники ночи начинаются здесь"
@@ -1015,13 +1024,8 @@ function INTRO:Close(immediate)
 		self.button:SetEnabled(false)
 	end
 
-	-- Сохранён исходный музыкальный контракт проекта.
-	if (AfterlightMusic) then
-		AfterlightMusic.introActive = false
-		AfterlightMusic.waitingForCharacterSelection = true
-		AfterlightMusic:Play()
-	end
-
+	-- Музыкальный контекст удерживается до конца затухания: меню персонажей
+	-- появляется в тот же момент, и трек идёт без разрыва и перезапуска.
 	local function Finish()
 		if (IsValid(INTRO.frame)) then
 			INTRO.frame:Remove()
@@ -1032,6 +1036,7 @@ function INTRO:Close(immediate)
 		INTRO.active = false
 		INTRO.closing = false
 		INTRO:SetCharacterMenuVisible(true)
+		SetMusicContext(false)
 		hook.Remove("Think", INTRO.hookMenu)
 	end
 
@@ -1049,11 +1054,7 @@ function INTRO:Open()
 	self.shown = true
 	self.closing = false
 
-	if (AfterlightMusic) then
-		AfterlightMusic.introActive = true
-		AfterlightMusic.waitingForCharacterSelection = false
-		AfterlightMusic:Play()
-	end
+	SetMusicContext(true)
 
 	self:SetCharacterMenuVisible(false)
 
@@ -1090,11 +1091,8 @@ function INTRO:Open()
 	self.frame = frame
 	self.button = self:CreateButton(frame)
 
-	-- Дочерний контрол наследует видимость и AlphaTo заставки.
-	-- Watcher музыкального плагина также поддерживает позднюю загрузку плагинов.
-	if (AfterlightMusic and AfterlightMusic.AttachVolumeSlider) then
-		AfterlightMusic:AttachVolumeSlider(frame)
-	end
+	-- Ползунок громкости заставки размещает музыкальный контроллер: он сам
+	-- находит активный экран и наследует его видимость и затухание.
 
 	frame.OnKeyCodePressed = function(_, key)
 		if ((key == KEY_ESCAPE or key == KEY_SPACE or key == KEY_ENTER) and IsValid(INTRO.button) and INTRO.button:IsEnabled()) then
@@ -1151,6 +1149,9 @@ function INTRO:Destroy()
 	self.button = nil
 	self.active = false
 	self.closing = false
+
+	-- Заставка больше не существует — музыкальный запрос снимаем сразу.
+	SetMusicContext(false)
 end
 
 -- Безопасная очистка после hot reload старой версии файла.

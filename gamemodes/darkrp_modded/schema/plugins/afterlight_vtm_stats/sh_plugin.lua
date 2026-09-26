@@ -3,7 +3,7 @@ local PLUGIN = PLUGIN
 PLUGIN.name = "Afterlight VTM Character Sheet"
 PLUGIN.author = "Afterlight"
 PLUGIN.description = "Bloodlines-style categorized attributes and abilities with secure point pools."
-PLUGIN.version = "1.10.4"
+PLUGIN.version = "1.11.0"
 
 function PLUGIN:InitializedPlugins()
 	if (!ix.vampire or !ix.meta.character.IsVampire or !ix.char.vars.vampireDisciplines) then
@@ -492,4 +492,4 @@ function PLUGIN:OnCharacterDisciplinesCleared(character)
 	SyncToOwner(character)
 end
 
-print("[Afterlight VTM Stats] v1.10.3 loaded; live Health fraction is forced into the expanded bar.")
+print("[Afterlight VTM Stats] v1.11.0 loaded; live Health fraction is forced into the expanded bar.")

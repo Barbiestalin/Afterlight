@@ -7,7 +7,9 @@ ix.util.Include("cl_plugin.lua")
 if (SERVER) then
 	-- Основные пути оставлены без изменений.
 	resource.AddFile("materials/afterlight/intro/intro.jpg")
-	resource.AddFile("sound/afterlight/intro_music.mp3")
+
+	-- Музыкальный файл принадлежит плагину afterlight_menu_music: он же
+	-- добавляет его в список загрузки, чтобы не дублировать ресурс.
 
 	-- Оригинальные декоративные маски интро. PNG содержат прозрачность и
 	-- безопасно пропускаются кодом, если администратор ещё не установил файлы.
