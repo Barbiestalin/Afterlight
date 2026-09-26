@@ -27,6 +27,7 @@ local function make_label()
 	label.SetTextColor = function() end
 	label.SetWrap = function() end
 	label.SetAutoStretchVertical = function() end
+	label.SizeToContentsY = function() end
 	label.SetPos = function() end
 	label.SetWide = function() end
 	label.SetText = function(self, text)
@@ -130,10 +131,8 @@ end
 -- Несуществующая запись не должна падать.
 try("stats", "no_such_stat", 3)
 
--- Клик у нижнего края видимого окна: тултип обязан раскрыться вверх и
--- целиком остаться в видимой области (0,0,900,500 по заглушкам).
--- Клик у нижнего края экрана: тултип обязан раскрыться вверх и целиком
--- остаться на экране.
+-- Клик у нижнего края экрана: тултип обязан раскрыться СВЕРХУ от курсора и
+-- целиком остаться на экране.
 ScrH = function() return 600 end
 gui.MousePos = function() return 400, 570 end
 ix.vtm.descriptions.OpenTip("disciplines", "dominate", 2, guard)
@@ -146,15 +145,30 @@ if (not tip._popup) then
 	io.write("FAIL: тултип не сделан popup-ом\n")
 	os.exit(1)
 end
-if (tip._y > 570) then
-	io.write("FAIL: тултип не раскрылся вверх, y=" .. tostring(tip._y) .. "\n")
+local h = tip:GetTall()
+if (tip._y ~= 570 - h - 12) then
+	io.write("FAIL: тултип не раскрылся сверху от курсора, y=" .. tostring(tip._y) .. "\n")
 	os.exit(1)
 end
-if (tip._y + tip:GetTall() > 600 - 8) then
+if (tip._y < 8 or tip._y + h > 600 - 8) then
 	io.write("FAIL: тултип выходит за экран, y=" .. tostring(tip._y) .. "\n")
 	os.exit(1)
 end
-io.write("flip ok: y=" .. tip._y .. ", tall=" .. tip:GetTall() .. "\n")
+io.write("above ok: y=" .. tip._y .. ", tall=" .. h .. "\n")
+
+-- Клик у верхнего края: сверху не помещается — допустимый фолбэк вниз от
+-- курсора, зажатый экраном.
+local someStat = next(ix.vtm.descriptions.stats)
+gui.MousePos = function() return 400, 30 end
+ix.vtm.descriptions.OpenTip("stats", someStat, 1, guard)
+tip = ix.vtm.descriptions.lastTip
+h = tip:GetTall()
+local expect = math.min(math.max(30 + 18, 8), 600 - h - 8)
+if (tip._y ~= expect) then
+	io.write("FAIL: фолбэк вниз у верхнего края неверен, y=" .. tostring(tip._y) .. "\n")
+	os.exit(1)
+end
+io.write("top fallback ok: y=" .. tip._y .. ", tall=" .. h .. "\n")
 
 io.write(string.format("Тултипов открыто: %d, провалено: %d\n", opened, failed))
 if (failed > 0) then os.exit(1) end

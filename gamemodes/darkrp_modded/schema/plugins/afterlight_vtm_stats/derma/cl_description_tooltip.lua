@@ -37,10 +37,15 @@ function PANEL:SetContent(titleText, bodyText, width)
 	self.title:SetPos(10, 8)
 	self.title:SetWide(width - 20)
 	self.title:SetText(titleText)
+	self.title:SizeToContentsY()
+	-- Высота замеряется синхронно (SizeToContentsY учитывает перенос по текущей
+	-- ширине): позиция выставляется сразу после SetContent, и полагаться на
+	-- отложенный layout/SetAutoStretchVertical нельзя — высота была бы нулевой.
 	self.body:SetPos(10, 8)
 	self.body:SetWide(width - 20)
 	self.body:SetText(bodyText)
-	self:InvalidateLayout(true)
+	self.body:SizeToContentsY()
+	self:PerformLayout()
 end
 
 function PANEL:PerformLayout()
@@ -107,11 +112,13 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local w, h = tip:GetWide(), tip:GetTall()
 	local mx, my = gui.MousePos()
 	local x = math.Clamp(mx + 14, 8, math.max(ScrW() - w - 8, 8))
-	local y = my + 14
-	if (y + h > ScrH() - 8) then
-		y = my - h - 10
+	-- Описание всегда раскрывается СВЕРХУ от курсора: так оно читаемо и у
+	-- последних строк листа, у которых вниз просто нет места. Вниз тултип
+	-- уходит только когда сверху не помещается вовсе, и зажимается экраном.
+	local y = my - h - 12
+	if (y < 8) then
+		y = math.Clamp(my + 18, 8, math.max(ScrH() - h - 8, 8))
 	end
-	y = math.Clamp(y, 8, math.max(ScrH() - h - 8, 8))
 	tip:SetPos(x, y)
 	currentTip = tip
 	ix.vtm.descriptions.lastTip = tip
