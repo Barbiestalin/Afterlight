@@ -87,7 +87,12 @@ dofile(plugin .. "derma/cl_description_tooltip.lua")
 
 local function make_guard()
 	local guard = {_removed = false}
-	guard.GetParent = function() return nil end
+	local scroll = {_removed = false}
+	scroll.GetVBar = function() return true end
+	scroll.LocalToScreen = function(_, x, y) return x, y end
+	scroll.GetWide = function() return 900 end
+	scroll.GetTall = function() return 500 end
+	guard.GetParent = function() return scroll end
 	guard.Add = function(_, class) return vgui.Create(class) end
 	guard.ScreenToLocal = function(_, x, y) return x, y end
 	guard.GetWide = function() return 1000 end

@@ -83,6 +83,15 @@ local currentTip
 -- поэтому тултип обязан жить внутри того же поддерева, что и лист: крепим его
 -- к самой панели листа. Тогда он рисуется в том же проходе поверх строк листа
 -- и в окне персонажа, и в создании персонажа, и в админ-листе.
+local function FindScrollAncestor(panel)
+	local parent = panel:GetParent()
+	while (IsValid(parent)) do
+		if (parent.GetVBar) then return parent end
+		parent = parent:GetParent()
+	end
+	return nil
+end
+
 -- kind: "stats" | "disciplines"; guard — панель листа, владеющая тултипом.
 function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local name, text = ix.vtm.descriptions.Get(kind, id, level)
@@ -100,10 +109,24 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	tip.guard = guard
 	tip:SetContent(string.format("%s — уровень %d: %s", subjectName, level, name), text)
 
+	-- Лист обычно выше видимой области скролла: ограничиваем тултип именно
+	-- видимым окном, а при нехватке места снизу — раскрываем вверх от курсора.
+	local viewX, viewY, viewW, viewH = 0, 0, guard:GetWide(), guard:GetTall()
+	local scroll = FindScrollAncestor(guard)
+	if (scroll) then
+		viewX, viewY = guard:ScreenToLocal(scroll:LocalToScreen(0, 0))
+		viewW, viewH = scroll:GetWide(), scroll:GetTall()
+	end
+
 	local mx, my = gui.MousePos()
 	local lx, ly = guard:ScreenToLocal(mx, my)
-	local x = math.Clamp(lx + 14, 8, math.max(guard:GetWide() - tip:GetWide() - 8, 8))
-	local y = math.Clamp(ly + 14, 8, math.max(guard:GetTall() - tip:GetTall() - 8, 8))
+	local w, h = tip:GetWide(), tip:GetTall()
+	local x = math.Clamp(lx + 14, viewX + 4, math.max(viewX + viewW - w - 4, viewX + 4))
+	local y = ly + 14
+	if (y + h > viewY + viewH - 4) then
+		y = ly - h - 10
+	end
+	y = math.Clamp(y, viewY + 4, math.max(viewY + viewH - h - 4, viewY + 4))
 	tip:SetPos(x, y)
 	currentTip = tip
 end
