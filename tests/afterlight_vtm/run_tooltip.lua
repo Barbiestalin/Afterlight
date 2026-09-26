@@ -30,6 +30,7 @@ local function make_label()
 	label.SizeToContentsY = function() end
 	label.SetPos = function() end
 	label.SetWide = function() end
+	label.SetTall = function(self, h) self._tall = h end
 	label.SetText = function(self, text)
 		self._text = text
 		self._tall = 16 + math.floor(#text / 40) * 14
@@ -71,7 +72,10 @@ input = {IsMouseDown = function() return false end}
 surface = {
 	SetDrawColor = function() end,
 	DrawRect = function() end,
-	DrawOutlinedRect = function() end
+	DrawOutlinedRect = function() end,
+	SetFont = function() end,
+	-- Детерминированная метрика: 6px на символ, высота строки 14.
+	GetTextSize = function(s) return #s * 6, 14 end
 }
 function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
 function ScrW() return 1920 end
