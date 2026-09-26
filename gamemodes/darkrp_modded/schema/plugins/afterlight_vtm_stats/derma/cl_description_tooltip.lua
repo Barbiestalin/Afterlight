@@ -79,10 +79,21 @@ vgui.Register("AfterlightVTMDescriptionTip", PANEL, "DPanel")
 
 local currentTip
 
+-- Тултип живёт внутри верхнеуровневого фрейма листа (меню Helix, окно
+-- создания или админ-лист): тогда он рисуется поверх содержимого меню,
+-- а не под ним, и умирает вместе с меню.
+local function FindHost(panel)
+	local top = panel
+	while (IsValid(top:GetParent())) do
+		top = top:GetParent()
+	end
+	return top
+end
+
 -- kind: "stats" | "disciplines"; guard — панель листа, владеющая тултипом.
 function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local name, text = ix.vtm.descriptions.Get(kind, id, level)
-	if (!name) then return end
+	if (!name or !IsValid(guard)) then return end
 
 	if (IsValid(currentTip)) then
 		currentTip:Remove()
@@ -92,13 +103,15 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local definition = kind == "disciplines" and ix.disciplines.list[id] or ix.vtm.stats.list[id]
 	local subjectName = definition and definition.name or id
 
-	local tip = vgui.Create("AfterlightVTMDescriptionTip")
+	local host = FindHost(guard)
+	local tip = host:Add("AfterlightVTMDescriptionTip")
 	tip.guard = guard
 	tip:SetContent(string.format("%s — уровень %d: %s", subjectName, level, name), text)
 
 	local mx, my = gui.MousePos()
-	local x = math.Clamp(mx + 14, 8, ScrW() - tip:GetWide() - 8)
-	local y = math.Clamp(my + 14, 8, ScrH() - tip:GetTall() - 8)
+	local lx, ly = host:ScreenToLocal(mx, my)
+	local x = math.Clamp(lx + 14, 8, math.max(host:GetWide() - tip:GetWide() - 8, 8))
+	local y = math.Clamp(ly + 14, 8, math.max(host:GetTall() - tip:GetTall() - 8, 8))
 	tip:SetPos(x, y)
 	currentTip = tip
 end

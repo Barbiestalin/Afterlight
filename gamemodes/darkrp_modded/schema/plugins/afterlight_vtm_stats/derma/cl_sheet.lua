@@ -27,6 +27,7 @@ function ROW:Init()
 				ix.vtm.descriptions.OpenTip("stats", self.definition.id, button.index, self.sheet)
 			end
 		end
+		dot:SetTooltip("При нажатии ПКМ открывается описание")
 		dot.Paint = function(button, w, h)
 			local active = button.index <= self.value
 			local temporary = active and button.afterlightTemporary == true
@@ -100,6 +101,7 @@ function DISCIPLINE_ROW:Init()
 				ix.vtm.descriptions.OpenTip("disciplines", self.definition.id, button.index, self.sheet)
 			end
 		end
+		dot:SetTooltip("При нажатии ПКМ открывается описание")
 		dot.Paint = function(panel, w, h)
 			local active = panel.index <= self.level
 			local color = active and Color(142, 8, 28) or Color(20, 18, 19)

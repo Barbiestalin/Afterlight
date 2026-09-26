@@ -85,9 +85,19 @@ ix.vtm.stats = {list = setmetatable({}, {__index = function(_, id) return {name 
 ix.disciplines = {list = setmetatable({}, {__index = function(_, id) return {name = id} end})}
 dofile(plugin .. "derma/cl_description_tooltip.lua")
 
+local function make_guard()
+	local guard = {_removed = false}
+	guard.GetParent = function() return nil end
+	guard.Add = function(_, class) return vgui.Create(class) end
+	guard.ScreenToLocal = function(_, x, y) return x, y end
+	guard.GetWide = function() return 1000 end
+	guard.GetTall = function() return 800 end
+	return guard
+end
+
 local failed = 0
 local opened = 0
-local guard = {_removed = false}
+local guard = make_guard()
 
 local function try(kind, id, level)
 	local ok, err = pcall(ix.vtm.descriptions.OpenTip, kind, id, level, guard)
