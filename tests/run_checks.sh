@@ -47,3 +47,7 @@ HELIX_SRC="$HELIX_SRC" python3 "$ROOT/tests/check_helix_contract.py"
 echo
 echo "### Стенд Afterlight Music ($LUAJIT)"
 (cd "$ROOT/tests/afterlight_music" && HELIX_SRC="$HELIX_SRC" "$LUAJIT" run.lua)
+
+echo
+echo "### Стенд тултипа VTM-листа ($LUAJIT)"
+"$LUAJIT" "$ROOT/tests/afterlight_vtm/run_tooltip.lua"

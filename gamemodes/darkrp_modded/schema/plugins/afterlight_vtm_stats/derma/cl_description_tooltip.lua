@@ -22,13 +22,13 @@ function PANEL:Init()
 	self.title:SetFont("ixSmallBoldFont")
 	self.title:SetTextColor(Color(240, 220, 185))
 	self.title:SetWrap(true)
-	self.title:SetAutoStretchVertically(true)
+	self.title:SetAutoStretchVertical(true)
 
 	self.body = self:Add("DLabel")
 	self.body:SetFont("ixSmallFont")
 	self.body:SetTextColor(Color(225, 220, 212))
 	self.body:SetWrap(true)
-	self.body:SetAutoStretchVertically(true)
+	self.body:SetAutoStretchVertical(true)
 end
 
 function PANEL:SetContent(titleText, bodyText, width)
