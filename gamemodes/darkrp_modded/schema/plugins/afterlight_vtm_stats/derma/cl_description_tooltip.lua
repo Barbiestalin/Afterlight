@@ -79,17 +79,10 @@ vgui.Register("AfterlightVTMDescriptionTip", PANEL, "DPanel")
 
 local currentTip
 
--- Тултип живёт внутри верхнеуровневого фрейма листа (меню Helix, окно
--- создания или админ-лист): тогда он рисуется поверх содержимого меню,
--- а не под ним, и умирает вместе с меню.
-local function FindHost(panel)
-	local top = panel
-	while (IsValid(top:GetParent())) do
-		top = top:GetParent()
-	end
-	return top
-end
-
+-- Меню Helix рисует своё содержимое вручную (SetPaintedManually + PaintManual),
+-- поэтому тултип обязан жить внутри того же поддерева, что и лист: крепим его
+-- к самой панели листа. Тогда он рисуется в том же проходе поверх строк листа
+-- и в окне персонажа, и в создании персонажа, и в админ-листе.
 -- kind: "stats" | "disciplines"; guard — панель листа, владеющая тултипом.
 function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local name, text = ix.vtm.descriptions.Get(kind, id, level)
@@ -103,15 +96,14 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local definition = kind == "disciplines" and ix.disciplines.list[id] or ix.vtm.stats.list[id]
 	local subjectName = definition and definition.name or id
 
-	local host = FindHost(guard)
-	local tip = host:Add("AfterlightVTMDescriptionTip")
+	local tip = guard:Add("AfterlightVTMDescriptionTip")
 	tip.guard = guard
 	tip:SetContent(string.format("%s — уровень %d: %s", subjectName, level, name), text)
 
 	local mx, my = gui.MousePos()
-	local lx, ly = host:ScreenToLocal(mx, my)
-	local x = math.Clamp(lx + 14, 8, math.max(host:GetWide() - tip:GetWide() - 8, 8))
-	local y = math.Clamp(ly + 14, 8, math.max(host:GetTall() - tip:GetTall() - 8, 8))
+	local lx, ly = guard:ScreenToLocal(mx, my)
+	local x = math.Clamp(lx + 14, 8, math.max(guard:GetWide() - tip:GetWide() - 8, 8))
+	local y = math.Clamp(ly + 14, 8, math.max(guard:GetTall() - tip:GetTall() - 8, 8))
 	tip:SetPos(x, y)
 	currentTip = tip
 end
