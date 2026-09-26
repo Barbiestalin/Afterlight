@@ -252,6 +252,18 @@ check(hudChunk ~= nil, "cl_buff_hud.lua: синтаксис без ошибок"
 local containerChunk = loadfile(root .. "gamemodes/darkrp_modded/schema/plugins/afterlight_disciplines/sh_plugin.lua")
 check(containerChunk ~= nil, "контейнер afterlight_disciplines: синтаксис без ошибок")
 
+-- Клиентский порядок включения libs (алфавитный): cl_potence.lua идёт РАНЬШЕ
+-- sh_potence_levels.lua. Клиентский файл обязан пережить отсутствие ix.potence.
+net.Receive = function() end
+local clientIncludeOk = pcall(function()
+	ix = {}
+	PLUGIN = {}
+	dofile(base .. "libs/cl_potence.lua")
+	dofile(base .. "libs/sh_potence_levels.lua")
+end)
+check(clientIncludeOk, "клиентский порядок включения: cl раньше sh — без ошибки")
+check(ix.potence ~= nil and ix.potence.CRACK_LIFETIME == 8, "после обоих включений ix.potence собран")
+
 -- Пути звуков зарезервированы для будущих файлов.
 local joined = table.concat(addedFiles, "|")
 check(joined:find("afterlight/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")

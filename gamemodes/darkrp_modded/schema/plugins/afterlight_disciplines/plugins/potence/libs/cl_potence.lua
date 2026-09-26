@@ -1,5 +1,9 @@
 local PLUGIN = PLUGIN
 
+-- libs включаются в алфавитном порядке (ix.util.IncludeDir): на клиенте
+-- cl_potence.lua идёт РАНЬШЕ sh_potence_levels.lua, поэтому таблицу создаём
+-- здесь сами, а не полагаемся на порядок включения.
+ix.potence = ix.potence or {}
 ix.potence.cracks = ix.potence.cracks or {}
 ix.potence.trails = ix.potence.trails or {}
 
