@@ -79,29 +79,11 @@ vgui.Register("AfterlightVTMDescriptionTip", PANEL, "DPanel")
 
 local currentTip
 
--- Меню Helix рисует своё содержимое вручную (SetPaintedManually + PaintManual),
--- поэтому тултип обязан жить внутри того же поддерева, что и лист: крепим его
--- к самой панели листа. Тогда он рисуется в том же проходе поверх строк листа
--- и в окне персонажа, и в создании персонажа, и в админ-листе.
--- Лист живёт в вручную рисуемом поддереве меню и может быть обрезан любым
--- предком (субпанель меню, скролл и т.п.). Видимая область = пересечение
--- границ всех предков, переведённое в координаты листа.
-local function VisibleRect(panel)
-	local x1, y1 = panel:LocalToScreen(0, 0)
-	local x2, y2 = panel:LocalToScreen(panel:GetWide(), panel:GetTall())
-	local parent = panel:GetParent()
-	while (IsValid(parent)) do
-		local px1, py1 = parent:LocalToScreen(0, 0)
-		local px2, py2 = parent:LocalToScreen(parent:GetWide(), parent:GetTall())
-		x1, y1 = math.max(x1, px1), math.max(y1, py1)
-		x2, y2 = math.min(x2, px2), math.min(y2, py2)
-		parent = parent:GetParent()
-	end
-	local vx1, vy1 = panel:ScreenToLocal(x1, y1)
-	local vx2, vy2 = panel:ScreenToLocal(x2, y2)
-	return vx1, vy1, vx2 - vx1, vy2 - vy1
-end
-
+-- Меню Helix — панель-popup: VGUI рисует popup-панели поверх обычных
+-- верхнеуровневых, а вручную рисуемое поддерево меню обрезало тултип рамкой.
+-- Поэтому тултип создаётся верхнеуровневым и сам делается popup-ом (как Derma-
+-- окна, открывающиеся поверх меню Helix); затем ввод отключается — клики
+-- проходят сквозь тултип, а закрытие обрабатывает Think.
 -- kind: "stats" | "disciplines"; guard — панель листа, владеющая тултипом.
 function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local name, text = ix.vtm.descriptions.Get(kind, id, level)
@@ -115,20 +97,21 @@ function ix.vtm.descriptions.OpenTip(kind, id, level, guard)
 	local definition = kind == "disciplines" and ix.disciplines.list[id] or ix.vtm.stats.list[id]
 	local subjectName = definition and definition.name or id
 
-	local tip = guard:Add("AfterlightVTMDescriptionTip")
+	local tip = vgui.Create("AfterlightVTMDescriptionTip")
 	tip.guard = guard
 	tip:SetContent(string.format("%s — уровень %d: %s", subjectName, level, name), text)
+	tip:MakePopup()
+	tip:SetMouseInputEnabled(false)
+	tip:SetKeyboardInputEnabled(false)
 
-	local viewX, viewY, viewW, viewH = VisibleRect(guard)
-	local mx, my = gui.MousePos()
-	local lx, ly = guard:ScreenToLocal(mx, my)
 	local w, h = tip:GetWide(), tip:GetTall()
-	local x = math.Clamp(lx + 14, viewX + 4, math.max(viewX + viewW - w - 4, viewX + 4))
-	local y = ly + 14
-	if (y + h > viewY + viewH - 4) then
-		y = ly - h - 10
+	local mx, my = gui.MousePos()
+	local x = math.Clamp(mx + 14, 8, math.max(ScrW() - w - 8, 8))
+	local y = my + 14
+	if (y + h > ScrH() - 8) then
+		y = my - h - 10
 	end
-	y = math.Clamp(y, viewY + 4, math.max(viewY + viewH - h - 4, viewY + 4))
+	y = math.Clamp(y, 8, math.max(ScrH() - h - 8, 8))
 	tip:SetPos(x, y)
 	currentTip = tip
 	ix.vtm.descriptions.lastTip = tip

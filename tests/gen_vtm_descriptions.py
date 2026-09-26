@@ -27,6 +27,10 @@ SECTION_RE = re.compile(r"^\*\*[^`]*`([^`]+)`\)\*\*")
 LEVEL_RE = re.compile(r"^- (\d) — \*\*(.+?)\*\*:\s*(.+)$")
 
 
+def capitalize(text: str) -> str:
+    return text[0].upper() + text[1:] if text else text
+
+
 def lua_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
@@ -61,7 +65,7 @@ def parse_draft() -> dict[str, list[tuple[int, str, str]]]:
         level = LEVEL_RE.match(line)
         if level and current is not None:
             sections[current].append(
-                (int(level.group(1)), level.group(2).strip(), level.group(3).strip())
+                (int(level.group(1)), level.group(2).strip(), capitalize(level.group(3).strip()))
             )
     return sections
 

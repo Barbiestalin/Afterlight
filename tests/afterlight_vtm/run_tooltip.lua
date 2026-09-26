@@ -52,6 +52,7 @@ function panel_meta:InvalidateLayout()
 	if (self.PerformLayout) then self.PerformLayout(self) end
 end
 function panel_meta:Remove() self._removed = true end
+function panel_meta:MakePopup() self._popup = true end
 
 local registry = {}
 vgui = {
@@ -131,19 +132,26 @@ try("stats", "no_such_stat", 3)
 
 -- Клик у нижнего края видимого окна: тултип обязан раскрыться вверх и
 -- целиком остаться в видимой области (0,0,900,500 по заглушкам).
-gui.MousePos = function() return 400, 470 end
+-- Клик у нижнего края экрана: тултип обязан раскрыться вверх и целиком
+-- остаться на экране.
+ScrH = function() return 600 end
+gui.MousePos = function() return 400, 570 end
 ix.vtm.descriptions.OpenTip("disciplines", "dominate", 2, guard)
 local tip = ix.vtm.descriptions.lastTip
 if (not tip or not tip._y) then
 	io.write("FAIL: тултип не создан или не спозиционирован\n")
 	os.exit(1)
 end
-if (tip._y > 470) then
+if (not tip._popup) then
+	io.write("FAIL: тултип не сделан popup-ом\n")
+	os.exit(1)
+end
+if (tip._y > 570) then
 	io.write("FAIL: тултип не раскрылся вверх, y=" .. tostring(tip._y) .. "\n")
 	os.exit(1)
 end
-if (tip._y + tip:GetTall() > 500 - 4) then
-	io.write("FAIL: тултип выходит за видимое окно, y=" .. tostring(tip._y) .. "\n")
+if (tip._y + tip:GetTall() > 600 - 8) then
+	io.write("FAIL: тултип выходит за экран, y=" .. tostring(tip._y) .. "\n")
 	os.exit(1)
 end
 io.write("flip ok: y=" .. tip._y .. ", tall=" .. tip:GetTall() .. "\n")
