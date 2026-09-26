@@ -199,13 +199,13 @@ check(info2.damage == 5 + 20, "урон +20 на уровне 2")
 
 -- Прыжок: уровень 2 → стартовая скорость на 2 метра, без трещины (клиент).
 attacker.vel = Vector(0, 0, 0)
-PLUGIN:PlayerJump(attacker)
+PLUGIN:OnPlayerJump(attacker)
 local expect2 = ix.potence.JumpVelocity(2, 600)
 check(attacker.vel and math.abs(attacker.vel.z - expect2) < 0.01, "прыжок уровня 2: v=" .. math.floor(expect2))
 
 PLUGIN:ActivatePotence(attacker, character, 3)
 attacker.vel = Vector(0, 0, 100)
-PLUGIN:PlayerJump(attacker)
+PLUGIN:OnPlayerJump(attacker)
 local expect3 = ix.potence.JumpVelocity(4, 600)
 check(attacker.vel and math.abs(attacker.vel.z - (expect3 - 100)) < 0.01, "прыжок уровня 3: скорость подменяется на 4м")
 
@@ -228,6 +228,8 @@ local levelsSeen = {}
 for _, entry in ipairs(registered) do
 	levelsSeen[entry.definition.level] = true
 	check(entry.discipline == "potence", entry.id .. ": дисциплина potence")
+	check(entry.definition.name == "Уровень " .. entry.definition.level,
+		entry.id .. ": короткое имя для сегмента колеса")
 	check(entry.definition.GetVitaeCost() == ix.potence.GetLevelData(entry.definition.level).vitae,
 		entry.id .. ": стоимость витэ из таблицы")
 end
@@ -245,6 +247,8 @@ local clientChunk = loadfile(base .. "libs/cl_potence.lua")
 check(clientChunk ~= nil, "cl_potence.lua: синтаксис без ошибок")
 local shChunk = loadfile(base .. "sh_plugin.lua")
 check(shChunk ~= nil, "sh_plugin.lua: синтаксис без ошибок")
+local hudChunk = loadfile(root .. "gamemodes/darkrp_modded/schema/plugins/afterlight_disciplines/libs/cl_buff_hud.lua")
+check(hudChunk ~= nil, "cl_buff_hud.lua: синтаксис без ошибок")
 local containerChunk = loadfile(root .. "gamemodes/darkrp_modded/schema/plugins/afterlight_disciplines/sh_plugin.lua")
 check(containerChunk ~= nil, "контейнер afterlight_disciplines: синтаксис без ошибок")
 

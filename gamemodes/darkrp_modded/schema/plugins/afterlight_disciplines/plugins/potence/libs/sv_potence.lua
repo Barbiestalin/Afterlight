@@ -134,7 +134,8 @@ end
 
 -- Усиленный прыжок и эффекты взлёта: звук колебания воздуха и рябь (2+),
 -- трещина в точке отталкивания (3+). Клиент рисует эффекты по этому сообщению.
-function PLUGIN:PlayerJump(client)
+-- Хук именно OnPlayerJump: GM:PlayerJump в GMod не существует.
+function PLUGIN:OnPlayerJump(client)
 	local level = self:GetActiveLevel(client)
 	if (level == 0) then return end
 	local data = ix.potence.GetLevelData(level)

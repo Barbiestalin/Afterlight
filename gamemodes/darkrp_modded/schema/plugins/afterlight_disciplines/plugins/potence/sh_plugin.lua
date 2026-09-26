@@ -19,10 +19,12 @@ function PLUGIN:InitializedPlugins()
 	for level = 1, 5 do
 		local data = ix.potence.GetLevelData(level)
 
+		-- В сегментах колеса имя рисуется целиком, поэтому слово «Могущество»
+		-- не дублируем: центр колеса и так показывает дисциплину.
 		ix.disciplines.RegisterPower("potence", "potence_" .. level, {
-			name = "Могущество — уровень " .. level,
-			description = string.format("Сила +%d, урон в ближнем бою +%d на %d секунд.",
-				data.strength, data.damage, data.duration),
+			name = "Уровень " .. level,
+			description = string.format("Могущество %d: Сила +%d, урон в ближнем бою +%d, действует %d секунд.",
+				level, data.strength, data.damage, data.duration),
 			level = level,
 			cooldown = 0,
 			GetVitaeCost = function()
