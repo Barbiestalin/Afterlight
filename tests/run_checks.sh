@@ -51,3 +51,7 @@ echo "### Стенд Afterlight Music ($LUAJIT)"
 echo
 echo "### Стенд тултипа VTM-листа ($LUAJIT)"
 "$LUAJIT" "$ROOT/tests/afterlight_vtm/run_tooltip.lua"
+
+echo
+echo "### Стенд Могущества ($LUAJIT)"
+"$LUAJIT" "$ROOT/tests/afterlight_potence/run_potence.lua"
