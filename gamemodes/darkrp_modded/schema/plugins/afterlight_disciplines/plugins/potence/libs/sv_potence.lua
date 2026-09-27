@@ -6,8 +6,10 @@ util.AddNetworkString("AfterlightPotenceStatsChanged")
 -- Файлы появятся позже (звуки из открытых источников); регистрируем пути
 -- заранее, чтобы клиенты скачали их сразу после добавления.
 resource.AddFile("sound/" .. ix.potence.SOUND_JUMP)
+resource.AddFile("sound/" .. ix.potence.SOUND_CRACK)
 resource.AddFile("sound/" .. ix.potence.SOUND_HIT_LIGHT)
 resource.AddFile("sound/" .. ix.potence.SOUND_HIT_HEAVY)
+resource.AddFile("sound/" .. ix.potence.SOUND_ACTIVATE)
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -20,9 +22,13 @@ local function SoundExists(path)
 	return cached
 end
 
-local function EmitIfAvailable(entity, path, volume)
-	if (SoundExists(path)) then
-		entity:EmitSound(path, volume or 80)
+-- Своё звучание, а пока файла нет — стоковый фолбэк: способность слышна
+-- сразу после установки. Радиус 80 единиц ≈ 2 метра.
+local function EmitWithFallback(entity, customPath, fallbackPath, volume)
+	if (SoundExists(customPath)) then
+		entity:EmitSound(customPath, volume or 80)
+	elseif (fallbackPath) then
+		entity:EmitSound(fallbackPath, volume or 80)
 	end
 end
 
@@ -69,6 +75,7 @@ function PLUGIN:ActivatePotence(client, character, level)
 		end
 	end)
 	self:NotifyStats(character)
+	EmitWithFallback(client, ix.potence.SOUND_ACTIVATE, ix.potence.SOUND_FALLBACKS.activate, 200)
 	return true
 end
 
@@ -128,8 +135,12 @@ function PLUGIN:EntityTakeDamage(victim, damageInfo)
 		victim:SetVelocity(direction * data.knockback)
 	end
 
-	-- Звук удара поверх стандартного звука оружия: свой для 1-2 и для 3+.
-	EmitIfAvailable(attacker, level >= 3 and ix.potence.SOUND_HIT_HEAVY or ix.potence.SOUND_HIT_LIGHT, 90)
+	-- Особый звук удара поверх стандартного звука оружия (с уровня 2).
+	if (level >= 2) then
+		EmitWithFallback(attacker,
+			level >= 3 and ix.potence.SOUND_HIT_HEAVY or ix.potence.SOUND_HIT_LIGHT,
+			level >= 3 and ix.potence.SOUND_FALLBACKS.hitHeavy or ix.potence.SOUND_FALLBACKS.hitLight, 90)
+	end
 end
 
 -- Усиленный прыжок и эффекты взлёта: звук колебания воздуха и рябь (2+),
@@ -154,19 +165,25 @@ function PLUGIN:OnPlayerJump(client)
 	net.SendPVS(client:GetPos())
 
 	if (level >= 2) then
-		EmitIfAvailable(client, ix.potence.SOUND_JUMP, 80)
+		-- Колебание воздуха слышно и самому, и игрокам в радиусе ~2 метров.
+		EmitWithFallback(client, ix.potence.SOUND_JUMP, ix.potence.SOUND_FALLBACKS.jump, 80)
 
 		-- util.SpriteTrail существует только в server realm; сущность
-		-- env_spritetrail реплицируется клиентам сама.
+		-- env_spritetrail реплицируется клиентам сама. Трейл выключается
+		-- через 2 секунды после появления.
 		local trail = util.SpriteTrail(client, 0, Color(205, 212, 224, 60), false,
 			12, 1, 1.2, 0.04, "trails/smoke.vmt")
 		if (IsValid(trail)) then
-			timer.Simple(1.6, function()
+			timer.Simple(2, function()
 				if (IsValid(trail)) then
 					trail:Remove()
 				end
 			end)
 		end
+	end
+
+	if (level >= 3) then
+		EmitWithFallback(client, ix.potence.SOUND_CRACK, ix.potence.SOUND_FALLBACKS.crack, 80)
 	end
 end
 

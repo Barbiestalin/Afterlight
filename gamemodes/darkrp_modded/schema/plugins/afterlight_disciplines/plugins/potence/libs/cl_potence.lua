@@ -32,6 +32,34 @@ net.Receive("AfterlightPotenceJumpFX", function()
 	end
 end)
 
+-- Пыль и каменные осколки, вздымающиеся из трещины: взрывной выброс
+-- частиц в точке отталкивания.
+local function EmitCrackDust(position)
+	local emitter = ParticleEmitter(position)
+	if (!emitter) then return end
+
+	for i = 1, 12 do
+		local angle = math.Rand(0, math.pi * 2)
+		local radius = math.Rand(2, 16)
+		local origin = position + Vector(math.cos(angle) * radius, math.sin(angle) * radius, 2)
+		local material = i <= 7 and "particle/particle_smokegrenade"
+			or "effects/fleck_cement" .. (i % 2 + 1)
+		local particle = emitter:Add(material, origin)
+		if (particle) then
+			particle:SetVelocity(Vector(math.Rand(-35, 35), math.Rand(-35, 35), math.Rand(45, 120)))
+			particle:SetDieTime(math.Rand(0.6, 1.4))
+			particle:SetStartAlpha(math.Rand(60, 100))
+			particle:SetEndAlpha(0)
+			particle:SetStartSize(math.Rand(3, 6))
+			particle:SetEndSize(math.Rand(10, 20))
+			particle:SetColor(125, 115, 100)
+			particle:SetGravity(Vector(0, 0, -70))
+			particle:SetAirResistance(1)
+		end
+	end
+	emitter:Finish()
+end
+
 -- Трещина в точке отталкивания: рваные лучи от эпицентра, живут
 -- CRACK_LIFETIME секунд и тают в последнюю секунду.
 function PLUGIN:AddCrack(position)
@@ -58,6 +86,7 @@ function PLUGIN:AddCrack(position)
 	end
 
 	table.insert(ix.potence.cracks, {branches = branches, z = position.z + 0.6, born = RealTime()})
+	EmitCrackDust(position)
 end
 
 -- Лучи трещины рисуются балками в 3D-хуке: surface.DrawPoly работает ТОЛЬКО

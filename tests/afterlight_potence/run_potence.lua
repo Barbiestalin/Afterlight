@@ -49,6 +49,7 @@ function vectorMeta:Normalize()
 end
 vectorMeta.__mul = function(v, s) return setmetatable({x = v.x * s, y = v.y * s, z = v.z * s}, vectorMeta) end
 vectorMeta.__sub = function(a, b) return setmetatable({x = a.x - b.x, y = a.y - b.y, z = a.z - b.z}, vectorMeta) end
+vectorMeta.__add = function(a, b) return setmetatable({x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}, vectorMeta) end
 function Vector(x, y, z) return setmetatable({x = x or 0, y = y or 0, z = z or 0}, vectorMeta) end
 
 DMG_SLASH = 8
@@ -168,8 +169,11 @@ local damageInfo = {
 victim.vel = nil
 PLUGIN:EntityTakeDamage(victim, damageInfo)
 check(damageInfo.damage == 5 + 40, "урон кулаков +40 (уровень 5)")
-check(victim.vel and math.abs(victim.vel.x - 550) < 0.01 and victim.vel.z == 0, "отброс 550 ед/с от атакующего")
-check(#attacker.sounds == 0, "звуков нет, пока файлов нет на сервере")
+check(victim.vel and math.abs(victim.vel.x - 850) < 0.01 and victim.vel.z == 0, "отброс 850 ед/с от атакующего")
+check(#attacker.sounds == 3 and attacker.sounds[3] == ix.potence.SOUND_FALLBACKS.hitHeavy,
+	"удар уровня 5: особый звук поверх обычного (фолбэк до добавления файла)")
+check(attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.activate, "активация уровня: звук при включении")
+attacker.sounds = {}
 
 -- Огнестрел не получает бонусов.
 local bulletInfo = {damage = 10, attacker = attacker, inflictor = make_entity("weapon_ar2", false), type = DMG_BULLET}
@@ -180,14 +184,18 @@ bulletInfo.GetInflictor = damageInfo.GetInflictor
 bulletInfo.GetDamageType = damageInfo.GetDamageType
 PLUGIN:EntityTakeDamage(victim, bulletInfo)
 check(bulletInfo.damage == 10, "огнестрел без добавочного урона")
+check(#attacker.sounds == 0, "огнестрел без особого звука")
 
 -- Дверь выбивается на уровне 4+.
 local door = make_entity("prop_door_rotating", false)
 PLUGIN:EntityTakeDamage(door, damageInfo)
 check(door.fired[1] == "Unlock" and door.fired[2] == "Open", "дверь: Unlock затем Open")
+check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitHeavy, "удар по двери: особый звук")
+attacker.sounds = {}
 
 -- Уровень 2: дверь НЕ выбивается.
 PLUGIN:ActivatePotence(attacker, character, 2)
+attacker.sounds = {}
 local door2 = make_entity("prop_door_rotating", false)
 local info2 = {damage = 5, attacker = attacker, inflictor = hands, type = DMG_CLUB}
 info2.GetDamage = damageInfo.GetDamage
@@ -198,29 +206,42 @@ info2.GetDamageType = damageInfo.GetDamageType
 PLUGIN:EntityTakeDamage(door2, info2)
 check(#door2.fired == 0, "уровень 2: дверь не выбивается")
 check(info2.damage == 5 + 20, "урон +20 на уровне 2")
+check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitLight,
+	"удар уровня 2: лёгкий особый звук")
+attacker.sounds = {}
 
 -- Прыжок: уровень 1 — без трейла и без подмены скорости.
 local trailsCreated = 0
 util.SpriteTrail = function() trailsCreated = trailsCreated + 1 return {Remove = function() end} end
 PLUGIN:ActivatePotence(attacker, character, 1)
+attacker.sounds = {}
 attacker.vel = Vector(0, 0, 0)
 PLUGIN:OnPlayerJump(attacker)
 check(trailsCreated == 0, "прыжок уровня 1: без трейла")
 check(attacker.vel.z == 0, "прыжок уровня 1: скорость не подменяется")
+check(#attacker.sounds == 0, "прыжок уровня 1: без звука")
 
 -- Прыжок: уровень 2 → стартовая скорость на 2 метра и трейл ряби (сервер).
 PLUGIN:ActivatePotence(attacker, character, 2)
+attacker.sounds = {}
 attacker.vel = Vector(0, 0, 0)
 PLUGIN:OnPlayerJump(attacker)
 check(trailsCreated == 1, "прыжок уровня 2: трейл создан на сервере")
+check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.jump,
+	"прыжок уровня 2: колебание воздуха (фолбэк)")
+attacker.sounds = {}
 local expect2 = ix.potence.JumpVelocity(2, 600)
 check(attacker.vel and math.abs(attacker.vel.z - expect2) < 0.01, "прыжок уровня 2: v=" .. math.floor(expect2))
 
 PLUGIN:ActivatePotence(attacker, character, 3)
+attacker.sounds = {}
 attacker.vel = Vector(0, 0, 100)
 PLUGIN:OnPlayerJump(attacker)
 local expect3 = ix.potence.JumpVelocity(4, 600)
 check(attacker.vel and math.abs(attacker.vel.z - (expect3 - 100)) < 0.01, "прыжок уровня 3: скорость подменяется на 4м")
+check(#attacker.sounds == 2 and attacker.sounds[2] == ix.potence.SOUND_FALLBACKS.crack,
+	"прыжок уровня 3: добавлен звук удара земли")
+attacker.sounds = {}
 
 -- Истечение таймера очищает состояние.
 currentTime = currentTime + 30
@@ -279,14 +300,23 @@ end)
 check(clientIncludeOk, "клиентский порядок включения: cl раньше sh — без ошибки")
 check(ix.potence ~= nil and ix.potence.CRACK_LIFETIME == 8, "после обоих включений ix.potence собран")
 
--- Клиентский рантайм: трещина создаётся и рисуется балками без ошибок.
+-- Клиентский рантайм: трещина создаётся и рисуется балками без ошибки.
 function RealTime() return 0 end
+math.Rand = function(a, b) return (a + b) * 0.5 end
+local dustParticles = 0
+local particleStub = function() return {
+	SetVelocity = function() end, SetDieTime = function() end, SetStartAlpha = function() end,
+	SetEndAlpha = function() end, SetStartSize = function() end, SetEndSize = function() end,
+	SetColor = function() end, SetGravity = function() end, SetAirResistance = function() end
+} end
+ParticleEmitter = function() return {Add = function() dustParticles = dustParticles + 1 return particleStub() end, Finish = function() end} end
 local beamsDrawn = 0
 render = {SetMaterial = function() end, DrawBeam = function() beamsDrawn = beamsDrawn + 1 end}
 
 PLUGIN:AddCrack(Vector(100, 200, 0))
 check(#ix.potence.cracks == 1, "AddCrack: трещина добавлена")
 check(#ix.potence.cracks[1].branches >= 5, "AddCrack: не меньше пяти лучей")
+check(dustParticles > 0, "AddCrack: пыль и осколки вздымаются")
 
 local renderHook = hookStore["PostDrawTranslucentRenderables"]
 check(renderHook ~= nil, "render-хук трещин зарегистрирован")
