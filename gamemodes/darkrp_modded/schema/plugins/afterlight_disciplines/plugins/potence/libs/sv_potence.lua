@@ -10,6 +10,7 @@ resource.AddFile("sound/" .. ix.potence.SOUND_CRACK)
 resource.AddFile("sound/" .. ix.potence.SOUND_HIT_LIGHT)
 resource.AddFile("sound/" .. ix.potence.SOUND_HIT_HEAVY)
 resource.AddFile("sound/" .. ix.potence.SOUND_ACTIVATE)
+resource.AddFile("sound/" .. ix.potence.SOUND_DOOR)
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -34,16 +35,6 @@ end
 
 local function TimerName(client)
 	return "AfterlightPotence." .. (client:SteamID64() or client:EntIndex())
-end
-
--- Активный уровень (0 — не активно). NW2-значения видны клиенту, поэтому
--- эффекты и лист характеризации обновляются без отдельных синхронизаций.
-function PLUGIN:GetActiveLevel(client)
-	local level = client:GetNW2Int("afterlightPotenceLevel", 0)
-	if (level > 0 and client:GetNW2Float("afterlightPotenceEnd", 0) > CurTime()) then
-		return level
-	end
-	return 0
 end
 
 function PLUGIN:NotifyStats(character)
@@ -79,18 +70,6 @@ function PLUGIN:ActivatePotence(client, character, level)
 	return true
 end
 
--- Временный бонус к Силе: чарлист VTM Stats рисует его синими точками через
--- GetCharacterVTMStatBonus (тот же механизм, что у усиления крови).
-function PLUGIN:GetCharacterVTMStatBonus(character, statID)
-	if (statID != "strength") then return end
-	local client = character and character:GetPlayer()
-	if (!IsValid(client)) then return end
-	local level = self:GetActiveLevel(client)
-	if (level > 0) then
-		return ix.potence.GetLevelData(level).strength
-	end
-end
-
 local function IsMeleeHit(damageInfo)
 	local inflictor = damageInfo:GetInflictor()
 	if (IsValid(inflictor) and inflictor:GetClass() == "ix_hands") then return true end
@@ -100,15 +79,43 @@ end
 
 local DOOR_CLASSES = {prop_door_rotating = true, func_door = true, func_door_rotating = true}
 
--- Выбивание двери (уровни 4+): снимает замок и открывает даже запертую.
+-- Выбивание двери (уровни 4+): снимает замок и открывает даже запертую,
+-- включая парную створку (как ix_keys в Helix: unlock/open + партнёр).
 function PLUGIN:ForceDoorOpen(door)
-	door:Fire("Unlock")
-	door:Fire("Open")
+	door:Fire("unlock")
+	door:Fire("open")
+	local partner = door.GetDoorPartner and door:GetDoorPartner() or nil
+	if (IsValid(partner)) then
+		partner:Fire("unlock")
+		partner:Fire("open")
+	end
+	if (door.IsLocked) then
+		door.IsLocked = nil
+	end
 	timer.Simple(0.25, function()
 		if (IsValid(door)) then
-			door:Fire("Open")
+			door:Fire("open")
 		end
 	end)
+end
+
+-- Двери на серверах (DarkRP/Helix) обычно неуязвимы к урону, поэтому
+-- EntityTakeDamage по ним не стреляет. Выбивание ловим по самой атаке:
+-- пока активен уровень 4+, удар (IN_ATTACK/IN_ATTACK2) по двери выбивает её.
+function PLUGIN:StartCommand(client, cmd)
+	if (self:GetActiveLevel(client) < 4) then return end
+	if (!cmd:KeyDown(IN_ATTACK) and !cmd:KeyDown(IN_ATTACK2)) then return end
+	if ((client.afterlightPotenceDoorNext or 0) > CurTime()) then return end
+	client.afterlightPotenceDoorNext = CurTime() + 0.5
+
+	local data = {start = client:GetShootPos(), filter = client}
+	data.endpos = data.start + client:GetAimVector() * 100
+	local trace = util.TraceLine(data)
+	local entity = trace.Entity
+	if (IsValid(entity) and (DOOR_CLASSES[entity:GetClass()] or (entity.IsDoor and entity:IsDoor()))) then
+		self:ForceDoorOpen(entity)
+		EmitWithFallback(client, ix.potence.SOUND_DOOR, ix.potence.SOUND_FALLBACKS.doorKick, 90)
+	end
 end
 
 function PLUGIN:EntityTakeDamage(victim, damageInfo)

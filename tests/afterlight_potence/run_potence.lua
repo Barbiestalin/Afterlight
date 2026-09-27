@@ -83,6 +83,7 @@ util = {AddNetworkString = function() end}
 file = {Exists = function() return false end} -- звуков ещё нет — код обязан молчать
 
 -- ===== Таблица уровней (реальный файл) =====
+PLUGIN = {}
 dofile(base .. "libs/sh_potence_levels.lua")
 
 -- Сверка таблицы уровней с ТЗ.
@@ -110,7 +111,6 @@ local v4 = ix.potence.JumpVelocity(4, 600)
 check(math.abs(v4 - math.sqrt(2 * 600 * 4 * 39.37)) < 0.01, "JumpVelocity(4м) = sqrt(2*g*h)")
 
 -- ===== Серверная механика (реальный файл) =====
-PLUGIN = {}
 dofile(base .. "libs/sv_potence.lua")
 dofile(base .. "sh_plugin.lua")
 
@@ -132,6 +132,7 @@ local function make_entity(class, isPlayer)
 	entity.GetVelocity = function(self) return self.vel or Vector(0, 0, 0) end
 	entity.SetVelocity = function(self, v) self.vel = v end
 	entity.GetAimVector = function() return Vector(1, 0, 0) end
+	entity.GetShootPos = function(self) return self.pos or Vector(0, 0, 0) end
 	return entity
 end
 
@@ -189,7 +190,7 @@ check(#attacker.sounds == 0, "огнестрел без особого звук�
 -- Дверь выбивается на уровне 4+.
 local door = make_entity("prop_door_rotating", false)
 PLUGIN:EntityTakeDamage(door, damageInfo)
-check(door.fired[1] == "Unlock" and door.fired[2] == "Open", "дверь: Unlock затем Open")
+check(door.fired[1] == "unlock" and door.fired[2] == "open", "дверь: unlock затем open")
 check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitHeavy, "удар по двери: особый звук")
 attacker.sounds = {}
 
@@ -242,6 +243,31 @@ check(attacker.vel and math.abs(attacker.vel.z - (expect3 - 100)) < 0.01, "пр�
 check(#attacker.sounds == 2 and attacker.sounds[2] == ix.potence.SOUND_FALLBACKS.crack,
 	"прыжок уровня 3: добавлен звук удара земли")
 attacker.sounds = {}
+
+-- Выбивание двери атакой (StartCommand): двери неуязвимы к урону, поэтому
+-- EntityTakeDamage по ним не стреляет — ловим сам замах.
+IN_ATTACK = 1
+IN_ATTACK2 = 2
+traceTarget = nil
+util.TraceLine = function() return {Entity = traceTarget} end
+local cmdStub = {KeyDown = function() return true end}
+
+PLUGIN:ActivatePotence(attacker, character, 4)
+attacker.sounds = {}
+local kickedDoor = make_entity("prop_door_rotating", false)
+traceTarget = kickedDoor
+PLUGIN:StartCommand(attacker, cmdStub)
+check(kickedDoor.fired[1] == "unlock" and kickedDoor.fired[2] == "open",
+	"уровень 4: замах по двери выбивает её (StartCommand)")
+check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.doorKick,
+	"выбивание двери: звук")
+
+PLUGIN:ActivatePotence(attacker, character, 3)
+local safeDoor = make_entity("prop_door_rotating", false)
+traceTarget = safeDoor
+PLUGIN:StartCommand(attacker, cmdStub)
+check(#safeDoor.fired == 0, "уровень 3: дверь не выбивается")
+traceTarget = nil
 
 -- Истечение таймера очищает состояние.
 currentTime = currentTime + 30

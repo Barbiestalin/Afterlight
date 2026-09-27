@@ -1,3 +1,5 @@
+local PLUGIN = PLUGIN
+
 ix.potence = ix.potence or {}
 
 ix.potence.UNITS_PER_METER = 39.37
@@ -12,13 +14,15 @@ ix.potence.SOUND_CRACK = "afterlight/potence/crack_impact.wav"     -- удар �
 ix.potence.SOUND_HIT_LIGHT = "afterlight/potence/hit_light.wav"    -- особый удар, уровень 2, поверх обычного
 ix.potence.SOUND_HIT_HEAVY = "afterlight/potence/hit_heavy.wav"    -- особый удар, уровни 3+, поверх обычного
 ix.potence.SOUND_ACTIVATE = "afterlight/potence/activate.wav"      -- активация любого уровня
+ix.potence.SOUND_DOOR = "afterlight/potence/door_kick.wav"         -- выбивание двери (4+)
 
 ix.potence.SOUND_FALLBACKS = {
 	jump = "npc/vort/claw_swing2.wav",
 	crack = "physics/concrete/concrete_break2.wav",
 	hitLight = "physics/body/body_medium_impact_hard2.wav",
 	hitHeavy = "physics/body/body_medium_impact_hard5.wav",
-	activate = "physics/body/body_medium_impact_hard3.wav"
+	activate = "physics/body/body_medium_impact_hard3.wav",
+	doorKick = "physics/wood/wood_crate_impact_hard2.wav"
 }
 
 -- Параметры уровней по ТЗ: сила, добавочный урон ближнего боя, импульс
@@ -42,4 +46,27 @@ end
 function ix.potence.JumpVelocity(heightMeters, gravity)
 	gravity = tonumber(gravity) or 600
 	return math.sqrt(2 * gravity * heightMeters * ix.potence.UNITS_PER_METER)
+end
+
+-- Активный уровень (0 — не активно). NW2-значения реплицируются, поэтому
+-- функция общая для сервера и клиента.
+function PLUGIN:GetActiveLevel(client)
+	local level = client:GetNW2Int("afterlightPotenceLevel", 0)
+	if (level > 0 and client:GetNW2Float("afterlightPotenceEnd", 0) > CurTime()) then
+		return level
+	end
+	return 0
+end
+
+-- Временный бонус к Силе. ОБЯЗАТЕЛЬНО shared: чарлист рисует синие точки на
+-- клиенте через GetCharacterVTMStatBonus — у BloodBuff (Vampire Abilities)
+-- этот хук живёт в shared-файле, поэтому его точки и появляются.
+function PLUGIN:GetCharacterVTMStatBonus(character, statID)
+	if (statID != "strength") then return end
+	local client = character and character:GetPlayer()
+	if (!IsValid(client)) then return end
+	local level = self:GetActiveLevel(client)
+	if (level > 0) then
+		return ix.potence.GetLevelData(level).strength
+	end
 end
