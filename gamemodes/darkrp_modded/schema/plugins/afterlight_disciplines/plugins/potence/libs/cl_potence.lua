@@ -37,12 +37,12 @@ end)
 
 -- Воздушная рябь за персонажем при усиленном прыжке: короткий дымчатый трейл.
 function PLUGIN:AttachJumpTrail(client)
-	local old = self.trails[client]
+	local old = ix.potence.trails[client]
 	if (IsValid(old)) then old:Remove() end
 
 	local trail = util.SpriteTrail(client, 0, Color(215, 220, 230, 55), false, 12, 1, 1.4, 0.15,
 		"trails/smoke.vmt")
-	self.trails[client] = trail
+	ix.potence.trails[client] = trail
 	timer.Simple(1.8, function()
 		if (IsValid(trail)) then trail:Remove() end
 	end)
@@ -73,7 +73,7 @@ function PLUGIN:AddCrack(position)
 		branches[#branches + 1] = segments
 	end
 
-	table.insert(self.cracks, {branches = branches, z = position.z + 0.6, born = RealTime()})
+	table.insert(ix.potence.cracks, {branches = branches, z = position.z + 0.6, born = RealTime()})
 end
 
 local function DrawCrack(crack, alpha)

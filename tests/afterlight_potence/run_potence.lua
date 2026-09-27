@@ -59,7 +59,8 @@ function CurTime() return currentTime end
 function GetConVarNumber() return 600 end
 function IsValid(entity) return entity ~= nil and entity ~= false and entity.removed ~= true end
 
-hook = {Add = function() end, Run = function() end}
+hook = {Add = function(name, id, fn) hookStore[name] = fn end, Run = function() end}
+hookStore = {}
 
 timer_store = {}
 timer = {
@@ -263,6 +264,27 @@ local clientIncludeOk = pcall(function()
 end)
 check(clientIncludeOk, "клиентский порядок включения: cl раньше sh — без ошибки")
 check(ix.potence ~= nil and ix.potence.CRACK_LIFETIME == 8, "после обоих включений ix.potence собран")
+
+-- Клиентский рантайм: трещина и трейл создаются и рисуются без ошибок.
+util.SpriteTrail = function() return {Remove = function() end} end
+function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
+function RealTime() return 0 end
+cam = {Start3D = function() end, End3D = function() end}
+surface = {SetDrawColor = function() end, DrawPoly = function() end}
+
+PLUGIN:AddCrack(Vector(100, 200, 0))
+check(#ix.potence.cracks == 1, "AddCrack: трещина добавлена")
+check(#ix.potence.cracks[1].branches >= 5, "AddCrack: не меньше пяти лучей")
+
+local trailClient = make_entity("player", true)
+check(pcall(function() PLUGIN:AttachJumpTrail(trailClient) end), "AttachJumpTrail: без ошибки")
+check(ix.potence.trails[trailClient] ~= nil, "AttachJumpTrail: трейл привязан")
+
+local renderHook = hookStore["PostDrawTranslucentRenderables"]
+check(renderHook ~= nil, "render-хук трещин зарегистрирован")
+if (renderHook) then
+	check(pcall(renderHook), "render-хук: отрисовка без ошибки")
+end
 
 -- Пути звуков зарезервированы для будущих файлов.
 local joined = table.concat(addedFiles, "|")
