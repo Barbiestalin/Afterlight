@@ -5,7 +5,6 @@ local PLUGIN = PLUGIN
 -- здесь сами, а не полагаемся на порядок включения.
 ix.potence = ix.potence or {}
 ix.potence.cracks = ix.potence.cracks or {}
-ix.potence.trails = ix.potence.trails or {}
 
 -- Локальный генератор случайности: форма трещины детерминирована точкой,
 -- глобальный math.random не трогаем.
@@ -21,32 +20,17 @@ net.Receive("AfterlightPotenceStatsChanged", function()
 	hook.Run("AfterlightVTMTemporaryBonusesChanged", LocalPlayer():GetCharacter())
 end)
 
+-- Трейл воздушной ряби вешает СЕРВЕР (util.SpriteTrail — server realm,
+-- на клиенте его нет — отсюда был краш). Клиент по этому сообщению
+-- рисует только трещину (уровни 3+).
 net.Receive("AfterlightPotenceJumpFX", function()
-	local client = net.ReadEntity()
+	net.ReadEntity()
 	local position = net.ReadVector()
 	local level = net.ReadUInt(3)
-	if (!IsValid(client) or level == 0) then return end
-
-	if (level >= 2) then
-		PLUGIN:AttachJumpTrail(client)
-	end
 	if (level >= 3) then
 		PLUGIN:AddCrack(position)
 	end
 end)
-
--- Воздушная рябь за персонажем при усиленном прыжке: короткий дымчатый трейл.
-function PLUGIN:AttachJumpTrail(client)
-	local old = ix.potence.trails[client]
-	if (IsValid(old)) then old:Remove() end
-
-	local trail = util.SpriteTrail(client, 0, Color(215, 220, 230, 55), false, 12, 1, 1.4, 0.15,
-		"trails/smoke.vmt")
-	ix.potence.trails[client] = trail
-	timer.Simple(1.8, function()
-		if (IsValid(trail)) then trail:Remove() end
-	end)
-end
 
 -- Трещина в точке отталкивания: рваные лучи от эпицентра, живут
 -- CRACK_LIFETIME секунд и тают в последнюю секунду.
@@ -76,22 +60,18 @@ function PLUGIN:AddCrack(position)
 	table.insert(ix.potence.cracks, {branches = branches, z = position.z + 0.6, born = RealTime()})
 end
 
+-- Лучи трещины рисуются балками в 3D-хуке: surface.DrawPoly работает ТОЛЬКО
+-- в 2D-хуках, поэтому для 3D берём render.DrawBeam.
+local crackMaterial = Material("trails/smoke.vmt")
+
 local function DrawCrack(crack, alpha)
-	surface.SetDrawColor(12, 10, 10, alpha)
+	local color = Color(14, 11, 10, alpha)
 	for _, segments in ipairs(crack.branches) do
 		for _, segment in ipairs(segments) do
-			local x1, y1, x2, y2, width = segment[1], segment[2], segment[3], segment[4], segment[5]
-			local dx, dy = x2 - x1, y2 - y1
-			local length = math.sqrt(dx * dx + dy * dy)
-			if (length > 0.01) then
-				local px, py = (-dy / length) * width * 0.5, (dx / length) * width * 0.5
-				surface.DrawPoly({
-					{x = x1 + px, y = y1 + py, z = crack.z},
-					{x = x2 + px, y = y2 + py, z = crack.z},
-					{x = x2 - px, y = y2 - py, z = crack.z},
-					{x = x1 - px, y = y1 - py, z = crack.z}
-				})
-			end
+			render.DrawBeam(
+				Vector(segment[1], segment[2], crack.z),
+				Vector(segment[3], segment[4], crack.z),
+				segment[5], 0, 1, color)
 		end
 	end
 end
@@ -108,11 +88,9 @@ hook.Add("PostDrawTranslucentRenderables", "AfterlightPotenceCracks", function()
 	end
 	if (#cracks == 0) then return end
 
-	cam.Start3D()
+	render.SetMaterial(crackMaterial)
 	for _, crack in ipairs(cracks) do
 		local remaining = ix.potence.CRACK_LIFETIME - (now - crack.born)
-		local alpha = 235 * math.Clamp(remaining, 0, 1)
-		DrawCrack(crack, alpha)
+		DrawCrack(crack, 235 * math.Clamp(remaining, 0, 1))
 	end
-	cam.End3D()
 end)

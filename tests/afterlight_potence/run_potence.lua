@@ -36,6 +36,7 @@ function isfunction(value) return type(value) == "function" end
 function istable(value) return type(value) == "table" end
 function isstring(value) return type(value) == "string" end
 function isnumber(value) return type(value) == "number" end
+function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
 
 -- Минимальный Vector с операциями, которые использует серверный код.
 local vectorMeta = {}
@@ -198,9 +199,20 @@ PLUGIN:EntityTakeDamage(door2, info2)
 check(#door2.fired == 0, "уровень 2: дверь не выбивается")
 check(info2.damage == 5 + 20, "урон +20 на уровне 2")
 
--- Прыжок: уровень 2 → стартовая скорость на 2 метра, без трещины (клиент).
+-- Прыжок: уровень 1 — без трейла и без подмены скорости.
+local trailsCreated = 0
+util.SpriteTrail = function() trailsCreated = trailsCreated + 1 return {Remove = function() end} end
+PLUGIN:ActivatePotence(attacker, character, 1)
 attacker.vel = Vector(0, 0, 0)
 PLUGIN:OnPlayerJump(attacker)
+check(trailsCreated == 0, "прыжок уровня 1: без трейла")
+check(attacker.vel.z == 0, "прыжок уровня 1: скорость не подменяется")
+
+-- Прыжок: уровень 2 → стартовая скорость на 2 метра и трейл ряби (сервер).
+PLUGIN:ActivatePotence(attacker, character, 2)
+attacker.vel = Vector(0, 0, 0)
+PLUGIN:OnPlayerJump(attacker)
+check(trailsCreated == 1, "прыжок уровня 2: трейл создан на сервере")
 local expect2 = ix.potence.JumpVelocity(2, 600)
 check(attacker.vel and math.abs(attacker.vel.z - expect2) < 0.01, "прыжок уровня 2: v=" .. math.floor(expect2))
 
@@ -253,6 +265,8 @@ check(hudChunk ~= nil, "cl_buff_hud.lua: синтаксис без ошибок"
 local containerChunk = loadfile(root .. "gamemodes/darkrp_modded/schema/plugins/afterlight_disciplines/sh_plugin.lua")
 check(containerChunk ~= nil, "контейнер afterlight_disciplines: синтаксис без ошибок")
 
+function Material(path) return {path = path} end
+
 -- Клиентский порядок включения libs (алфавитный): cl_potence.lua идёт РАНЬШЕ
 -- sh_potence_levels.lua. Клиентский файл обязан пережить отсутствие ix.potence.
 net.Receive = function() end
@@ -265,25 +279,20 @@ end)
 check(clientIncludeOk, "клиентский порядок включения: cl раньше sh — без ошибки")
 check(ix.potence ~= nil and ix.potence.CRACK_LIFETIME == 8, "после обоих включений ix.potence собран")
 
--- Клиентский рантайм: трещина и трейл создаются и рисуются без ошибок.
-util.SpriteTrail = function() return {Remove = function() end} end
-function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
+-- Клиентский рантайм: трещина создаётся и рисуется балками без ошибок.
 function RealTime() return 0 end
-cam = {Start3D = function() end, End3D = function() end}
-surface = {SetDrawColor = function() end, DrawPoly = function() end}
+local beamsDrawn = 0
+render = {SetMaterial = function() end, DrawBeam = function() beamsDrawn = beamsDrawn + 1 end}
 
 PLUGIN:AddCrack(Vector(100, 200, 0))
 check(#ix.potence.cracks == 1, "AddCrack: трещина добавлена")
 check(#ix.potence.cracks[1].branches >= 5, "AddCrack: не меньше пяти лучей")
 
-local trailClient = make_entity("player", true)
-check(pcall(function() PLUGIN:AttachJumpTrail(trailClient) end), "AttachJumpTrail: без ошибки")
-check(ix.potence.trails[trailClient] ~= nil, "AttachJumpTrail: трейл привязан")
-
 local renderHook = hookStore["PostDrawTranslucentRenderables"]
 check(renderHook ~= nil, "render-хук трещин зарегистрирован")
 if (renderHook) then
 	check(pcall(renderHook), "render-хук: отрисовка без ошибки")
+	check(beamsDrawn > 0, "render-хук: лучи трещины рисуются балками")
 end
 
 -- Пути звуков зарезервированы для будущих файлов.

@@ -155,6 +155,18 @@ function PLUGIN:OnPlayerJump(client)
 
 	if (level >= 2) then
 		EmitIfAvailable(client, ix.potence.SOUND_JUMP, 80)
+
+		-- util.SpriteTrail существует только в server realm; сущность
+		-- env_spritetrail реплицируется клиентам сама.
+		local trail = util.SpriteTrail(client, 0, Color(205, 212, 224, 60), false,
+			12, 1, 1.2, 0.04, "trails/smoke.vmt")
+		if (IsValid(trail)) then
+			timer.Simple(1.6, function()
+				if (IsValid(trail)) then
+					trail:Remove()
+				end
+			end)
+		end
 	end
 end
 
