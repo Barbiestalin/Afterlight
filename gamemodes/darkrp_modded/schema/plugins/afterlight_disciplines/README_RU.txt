@@ -17,7 +17,7 @@ Afterlight Disciplines — контейнер вампирских дисцип�
     GetCharacterVTMStatBonus (механизм afterlight_vampire_abilities).
 
 Экранная аура (клиент, libs/cl_potence_hud.lua): пока Могущество активно,
-по краям экрана пульсируют красные молнии в эстетике VTM Bloodlines - два
+по краям экрана пульсируют красные молнии в эстетике VTM Bloodlines - три
 слоя красных молний (materials/afterlight/disciplines/potence/potence_fx_a/b.png,
 прозрачность запечена в png: чёрный центр невидим), слои мерцают и меняются случайными
 вспышками, появление и затухание плавные, по 1 секунде.

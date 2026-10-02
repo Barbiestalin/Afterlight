@@ -464,7 +464,8 @@ local function FxPathWanted(want)
 	return false
 end
 check(FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_a.png")
-	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_b.png"),
+	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_b.png")
+	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_c.png"),
 	"аура: материалы ищутся в afterlight/disciplines/potence")
 fxClient.nw2["afterlightPotenceLevel"] = 0
 for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end

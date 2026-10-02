@@ -16,6 +16,7 @@ resource.AddFile("sound/" .. ix.potence.SOUND_CRACK)
 -- Экранная аура Могущества: оверлеи красных молний (прозрачность в png).
 resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_a.png")
 resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_b.png")
+resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_c.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 

@@ -1,11 +1,12 @@
 local PLUGIN = PLUGIN
 
 -- Кровавая аура Могущества по краям экрана (эстетика VTM Bloodlines):
--- два слоя красных молний (прозрачность запечена в png), пульсация, мерцание-обрывы,
--- плавные появление и затухание за 1 секунду.
-ix.potence.fx = ix.potence.fx or {alpha = 0, nextSwap = 0, layer = 1, flicker = 1}
+-- три слоя красных молний (прозрачность запечена в png), у каждого своя
+-- плавная огибающая вспышек, третий слой — «дышащая» база ауры; общая
+-- пульсация и плавные появление/затухание за 1 секунду.
+ix.potence.fx = ix.potence.fx or {alpha = 0, layers = {}}
 
-local LAYERS = {"potence_fx_a", "potence_fx_b"}
+local LAYERS = {"potence_fx_a", "potence_fx_b", "potence_fx_c"}
 local materials = {}
 
 -- Прозрачность запечена в сам PNG (чёрный = прозрачный), поэтому vmt не
@@ -49,30 +50,36 @@ hook.Add("HUDPaint", "AfterlightPotenceScreenFx", function()
 
 	local now = RealTime()
 
-	-- Молнии «то появляются, то прерываются»: слои меняются короткими
-	-- случайными вспышками, каждая со своей яркостью.
-	if (now >= fx.nextSwap) then
-		fx.nextSwap = now + math.Rand(0.08, 0.22)
-		fx.layer = (fx.layer % 2) + 1
-		fx.flicker = math.Rand(0.55, 1)
-	end
+	-- Общая мягкая пульсация ауры.
+	local pulse = 0.75 + 0.25 * math.sin(now * 3.1)
 
-	-- Мистическая пульсация ауры.
-	local pulse = 0.7 + 0.3 * math.sin(now * 5.2)
-	local alpha = math.Clamp(255 * fx.alpha * pulse * fx.flicker, 0, 255)
+	for index = 1, #LAYERS do
+		local layer = fx.layers[index]
+		if (!layer) then
+			layer = {env = 0, target = 0, next = 0}
+			fx.layers[index] = layer
+		end
 
-	local material = GetFxMaterial(LAYERS[fx.layer])
-	if (material) then
-		surface.SetDrawColor(255, 255, 255, alpha)
-		surface.SetMaterial(material)
-		surface.DrawTexturedRect(0, 0, ScrW(), ScrH())
-	end
+		-- Каждый слой живёт своей жизнью: вспышка возникает случайно,
+		-- её цель плавно распадается, а огибающая гладко тянется к цели —
+		-- молнии появляются и прерываются без жёстких переключений.
+		layer.target = layer.target * math.exp(-dt * 2.2)
+		if (now >= layer.next) then
+			layer.next = now + math.Rand(0.3, 1.1)
+			layer.target = math.Rand(0.55, 1)
+		end
+		layer.env = layer.env + (layer.target - layer.env) * math.min(1, dt * 14)
 
-	-- Второй слой — в противофазе и тише: края «дышат», а не мигают плоско.
-	local second = GetFxMaterial(LAYERS[(fx.layer % 2) + 1])
-	if (second) then
-		surface.SetDrawColor(255, 255, 255, math.Clamp(alpha * 0.35 * (1.1 - pulse), 0, 255))
-		surface.SetMaterial(second)
-		surface.DrawTexturedRect(0, 0, ScrW(), ScrH())
+		-- Третий слой — «дыхание» ауры: едва заметная постоянная основа,
+		-- даёт эффекту непрерывность и глубину между вспышками.
+		local base = index == 3 and 0.3 + 0.2 * math.sin(now * 1.7 + 1) or 0
+
+		local strength = math.Clamp((layer.env + base) * pulse, 0, 1)
+		local material = GetFxMaterial(LAYERS[index])
+		if (material and strength > 0.02) then
+			surface.SetDrawColor(255, 255, 255, math.Clamp(255 * fx.alpha * strength, 0, 255))
+			surface.SetMaterial(material)
+			surface.DrawTexturedRect(0, 0, ScrW(), ScrH())
+		end
 	end
 end)
