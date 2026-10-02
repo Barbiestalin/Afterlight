@@ -5,12 +5,11 @@ util.AddNetworkString("AfterlightPotenceStatsChanged")
 
 -- Файлы появятся позже (звуки из открытых источников); регистрируем пути
 -- заранее, чтобы клиенты скачали их сразу после добавления.
+resource.AddFile("sound/" .. ix.potence.SOUND_USE)
+resource.AddFile("sound/" .. ix.potence.SOUND_PUNCH)
+resource.AddFile("sound/" .. ix.potence.SOUND_DOOR)
 resource.AddFile("sound/" .. ix.potence.SOUND_JUMP)
 resource.AddFile("sound/" .. ix.potence.SOUND_CRACK)
-resource.AddFile("sound/" .. ix.potence.SOUND_HIT_LIGHT)
-resource.AddFile("sound/" .. ix.potence.SOUND_HIT_HEAVY)
-resource.AddFile("sound/" .. ix.potence.SOUND_ACTIVATE)
-resource.AddFile("sound/" .. ix.potence.SOUND_DOOR)
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -66,7 +65,7 @@ function PLUGIN:ActivatePotence(client, character, level)
 		end
 	end)
 	self:NotifyStats(character)
-	EmitWithFallback(client, ix.potence.SOUND_ACTIVATE, ix.potence.SOUND_FALLBACKS.activate, 200)
+	EmitWithFallback(client, ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate, 200)
 	return true
 end
 
@@ -119,6 +118,12 @@ function PLUGIN:StartCommand(client, cmd)
 end
 
 function PLUGIN:EntityTakeDamage(victim, damageInfo)
+	-- На время действия Могущества (2+) урон от падения не наносится.
+	if (victim:IsPlayer() and damageInfo:IsDamageType(DMG_FALL) and self:GetActiveLevel(victim) >= 2) then
+		damageInfo:SetDamage(0)
+		return
+	end
+
 	local attacker = damageInfo:GetAttacker()
 	if (!IsValid(attacker) or !attacker:IsPlayer() or attacker == victim) then return end
 	local level = self:GetActiveLevel(attacker)
@@ -144,8 +149,7 @@ function PLUGIN:EntityTakeDamage(victim, damageInfo)
 
 	-- Особый звук удара поверх стандартного звука оружия (с уровня 2).
 	if (level >= 2) then
-		EmitWithFallback(attacker,
-			level >= 3 and ix.potence.SOUND_HIT_HEAVY or ix.potence.SOUND_HIT_LIGHT,
+		EmitWithFallback(attacker, ix.potence.SOUND_PUNCH,
 			level >= 3 and ix.potence.SOUND_FALLBACKS.hitHeavy or ix.potence.SOUND_FALLBACKS.hitLight, 90)
 	end
 end

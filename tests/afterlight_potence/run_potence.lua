@@ -55,6 +55,7 @@ function Vector(x, y, z) return setmetatable({x = x or 0, y = y or 0, z = z or 0
 DMG_SLASH = 8
 DMG_CLUB = 128
 DMG_BULLET = 2
+DMG_FALL = 32
 
 local currentTime = 1000
 function CurTime() return currentTime end
@@ -165,7 +166,8 @@ local damageInfo = {
 	SetDamage = function(self, value) self.damage = value end,
 	GetAttacker = function(self) return self.attacker end,
 	GetInflictor = function(self) return self.inflictor end,
-	GetDamageType = function(self) return self.type end
+	GetDamageType = function(self) return self.type end,
+	IsDamageType = function(self, t) return bit.band(self.type or 0, t) ~= 0 end
 }
 victim.vel = nil
 PLUGIN:EntityTakeDamage(victim, damageInfo)
@@ -183,6 +185,7 @@ bulletInfo.SetDamage = damageInfo.SetDamage
 bulletInfo.GetAttacker = damageInfo.GetAttacker
 bulletInfo.GetInflictor = damageInfo.GetInflictor
 bulletInfo.GetDamageType = damageInfo.GetDamageType
+bulletInfo.IsDamageType = damageInfo.IsDamageType
 PLUGIN:EntityTakeDamage(victim, bulletInfo)
 check(bulletInfo.damage == 10, "огнестрел без добавочного урона")
 check(#attacker.sounds == 0, "огнестрел без особого звука")
@@ -204,6 +207,7 @@ info2.SetDamage = damageInfo.SetDamage
 info2.GetAttacker = damageInfo.GetAttacker
 info2.GetInflictor = damageInfo.GetInflictor
 info2.GetDamageType = damageInfo.GetDamageType
+info2.IsDamageType = damageInfo.IsDamageType
 PLUGIN:EntityTakeDamage(door2, info2)
 check(#door2.fired == 0, "уровень 2: дверь не выбивается")
 check(info2.damage == 5 + 20, "урон +20 на уровне 2")
@@ -268,6 +272,23 @@ traceTarget = safeDoor
 PLUGIN:StartCommand(attacker, cmdStub)
 check(#safeDoor.fired == 0, "уровень 3: дверь не выбивается")
 traceTarget = nil
+
+-- Урон от падения: ноль на время Могущества 2+, обычный без него.
+local fallInfo = {damage = 40, type = DMG_FALL}
+fallInfo.GetDamage = damageInfo.GetDamage
+fallInfo.SetDamage = damageInfo.SetDamage
+fallInfo.GetAttacker = function() return nil end
+fallInfo.GetInflictor = function() return nil end
+fallInfo.GetDamageType = damageInfo.GetDamageType
+fallInfo.IsDamageType = damageInfo.IsDamageType
+PLUGIN:ActivatePotence(victim, nil, 2)
+fallInfo.damage = 40
+PLUGIN:EntityTakeDamage(victim, fallInfo)
+check(fallInfo.damage == 0, "падение при Могуществе 2+: урон обнулён")
+PLUGIN:ClearPotence(victim)
+fallInfo.damage = 40
+PLUGIN:EntityTakeDamage(victim, fallInfo)
+check(fallInfo.damage == 40, "падение без Могущества: урон как обычно")
 
 -- Истечение таймера очищает состояние.
 currentTime = currentTime + 30
@@ -353,9 +374,10 @@ end
 
 -- Пути звуков зарезервированы для будущих файлов.
 local joined = table.concat(addedFiles, "|")
+check(joined:find("afterlight/potence/use.mp3", 1, true) ~= nil, "звук использования use.mp3 зарегистрирован")
+check(joined:find("afterlight/potence/punch.mp3", 1, true) ~= nil, "звук удара punch.mp3 зарегистрирован")
+check(joined:find("afterlight/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
 check(joined:find("afterlight/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
-check(joined:find("afterlight/potence/hit_light.wav", 1, true) ~= nil, "зарезервирован звук удара 1-2")
-check(joined:find("afterlight/potence/hit_heavy.wav", 1, true) ~= nil, "зарезервирован звук удара 3+")
 
 io.write(string.format("Проверок Могущества: %d, провалено: %d\n", checks, failures))
 if (failures > 0) then os.exit(1) end

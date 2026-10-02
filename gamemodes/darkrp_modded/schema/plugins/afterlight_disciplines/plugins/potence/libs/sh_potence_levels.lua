@@ -6,15 +6,14 @@ ix.potence.UNITS_PER_METER = 39.37
 -- Трещина на земле (уровни 3+) живёт 8 секунд серверного времени.
 ix.potence.CRACK_LIFETIME = 8
 
--- ЗВУКИ. Кладите свои файлы в garrysmod/sound/afterlight/potence/ под этими
--- именами — код подхватит их автоматически и раздаст клиентам (resource.AddFile).
--- Пока файла нет, играет стоковый фолбэк из SOUND_FALLBACKS (эффект слышен сразу).
-ix.potence.SOUND_JUMP = "afterlight/potence/jump_air.wav"          -- колебание воздуха при прыжке (2+)
-ix.potence.SOUND_CRACK = "afterlight/potence/crack_impact.wav"     -- удар земли при прыжке (3+)
-ix.potence.SOUND_HIT_LIGHT = "afterlight/potence/hit_light.wav"    -- особый удар, уровень 2, поверх обычного
-ix.potence.SOUND_HIT_HEAVY = "afterlight/potence/hit_heavy.wav"    -- особый удар, уровни 3+, поверх обычного
-ix.potence.SOUND_ACTIVATE = "afterlight/potence/activate.wav"      -- активация любого уровня
-ix.potence.SOUND_DOOR = "afterlight/potence/door_kick.wav"         -- выбивание двери (4+)
+-- ЗВУКИ. Свои файлы use/punch/door лежат в ветке (sound/afterlight/potence)
+-- и раздаются клиентам (resource.AddFile). Пока своего файла нет, играет
+-- стоковый фолбэк из SOUND_FALLBACKS (эффект слышен сразу).
+ix.potence.SOUND_USE = "afterlight/potence/use.mp3"      -- звучит при активации/использовании Могущества
+ix.potence.SOUND_PUNCH = "afterlight/potence/punch.mp3"  -- особый удар (2+), поверх стандартного звука HL2
+ix.potence.SOUND_DOOR = "afterlight/potence/door.mp3"    -- выбивание двери (4+)
+ix.potence.SOUND_JUMP = "afterlight/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
+ix.potence.SOUND_CRACK = "afterlight/potence/crack_impact.wav" -- удар земли при прыжке (3+)
 
 ix.potence.SOUND_FALLBACKS = {
 	jump = "npc/vort/claw_swing2.wav",
