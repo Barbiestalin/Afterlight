@@ -4,6 +4,8 @@ local PLUGIN = PLUGIN
 -- три слоя красных молний (прозрачность запечена в png), у каждого своя
 -- плавная огибающая вспышек, третий слой — «дышащая» база ауры; общая
 -- пульсация и плавные появление/затухание за 1 секунду.
+-- Там же — амбиент дисциплины: зацикленный звук на всё время действия,
+-- плавно входящий после звука активации и плавно затухающий в конце.
 ix.potence.fx = ix.potence.fx or {alpha = 0, layers = {}}
 
 local LAYERS = {"potence_fx_a", "potence_fx_b", "potence_fx_c"}
@@ -30,6 +32,77 @@ local function GetFxMaterial(name)
 	return mat
 end
 
+-- === Амбиент Могущества ===
+-- states: off -> wait (пауза после звука активации) -> in (набор громкости)
+-- и out (плавное затухание) -> off с остановкой канала.
+local ambient = {channel = nil, loading = false, volume = 0, state = "off", startAt = 0, path = nil, pathTry = 0}
+ix.potence.fx.amb = ambient
+
+local function GetLoopPath(now)
+	if (ambient.path or now < ambient.pathTry) then
+		return ambient.path
+	end
+
+	ambient.pathTry = now + 5
+	for _, candidate in ipairs({ix.potence.SOUND_LOOP, ix.potence.SOUND_LOOP_LEGACY}) do
+		if (candidate and file.Exists("sound/" .. candidate, "GAME")) then
+			ambient.path = candidate
+			break
+		end
+	end
+	return ambient.path
+end
+
+local function UpdateAmbience(active, now, dt)
+	if (active and ambient.state == "off") then
+		ambient.state = "wait"
+		ambient.startAt = now + (ix.potence.AMBIENT_DELAY or 1.2)
+	elseif (!active and ambient.state == "wait") then
+		ambient.state = "off"
+	elseif (!active and (ambient.state == "in" or ambient.state == "out")) then
+		ambient.state = "out"
+	elseif (active and ambient.state == "out") then
+		ambient.state = "in"
+	end
+
+	if (ambient.state == "wait" and now >= ambient.startAt) then
+		ambient.state = "in"
+	end
+
+	if ((ambient.state == "in" or ambient.state == "out") and !ambient.channel and !ambient.loading) then
+		local path = GetLoopPath(now)
+		if (path) then
+			ambient.loading = true
+			sound.PlayFile("sound/" .. path, "loop noblock noplay", function(channel)
+				ambient.loading = false
+				if (IsValid(channel)) then
+					ambient.channel = channel
+					channel:SetVolume(0)
+					channel:Play()
+				end
+			end)
+		end
+	end
+
+	local channel = ambient.channel
+	if (!channel) then return end
+
+	if (ambient.state == "in") then
+		ambient.volume = math.min(ambient.volume + dt / (ix.potence.AMBIENT_FADE or 1), 1)
+	elseif (ambient.state == "out") then
+		ambient.volume = math.max(ambient.volume - dt / (ix.potence.AMBIENT_FADE or 1), 0)
+	end
+
+	if (ambient.volume <= 0 and ambient.state == "out") then
+		channel:Stop()
+		ambient.channel = nil
+		ambient.state = "off"
+		return
+	end
+
+	channel:SetVolume(ambient.volume * (ix.potence.AMBIENT_VOLUME or 0.7))
+end
+
 hook.Add("HUDPaint", "AfterlightPotenceScreenFx", function()
 	local client = LocalPlayer()
 	if (!IsValid(client)) then return end
@@ -38,17 +111,19 @@ hook.Add("HUDPaint", "AfterlightPotenceScreenFx", function()
 	local active = client:GetNW2Int("afterlightPotenceLevel", 0) > 0
 		and client:GetNW2Float("afterlightPotenceEnd", 0) > CurTime()
 
-	-- Плавные вход и выход: 1 секунда в каждую сторону.
-	local target = active and 1 or 0
 	local dt = FrameTime()
+	local now = RealTime()
+
+	UpdateAmbience(active, now, dt)
+
+	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
+	local target = active and 1 or 0
 	if (fx.alpha < target) then
 		fx.alpha = math.min(fx.alpha + dt, 1)
 	elseif (fx.alpha > target) then
 		fx.alpha = math.max(fx.alpha - dt, 0)
 	end
 	if (fx.alpha <= 0.01) then return end
-
-	local now = RealTime()
 
 	-- Общая мягкая пульсация ауры.
 	local pulse = 0.75 + 0.25 * math.sin(now * 3.1)

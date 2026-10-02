@@ -415,7 +415,12 @@ local playFileDecodes = true
 sound = {PlayFile = function(path, flags, cb)
 	playedFiles[#playedFiles + 1] = path
 	if (playFileDecodes) then
-		cb({Play = function() end, SetVolume = function() end})
+		cb({
+			flags = flags, volume = 0, stopped = false,
+			Play = function(self) self.playing = true end,
+			SetVolume = function(self, v) self.volume = v end,
+			Stop = function(self) self.stopped = true end
+		})
 	else
 		cb(nil)
 	end
@@ -473,6 +478,45 @@ check(ix.potence.fx.alpha == 0, "аура: плавно гаснет за 1 се
 local drawsAfterFade = fxDraws
 fxHook()
 check(fxDraws == drawsAfterFade, "аура: после затухания больше не рисуется")
+
+-- Амбиент: цикл на всё время действия, плавный вход после звука активации,
+-- плавное затухание и остановка при окончании (время зависит от уровня).
+local amb = ix.potence.fx.amb
+check(amb ~= nil, "амбиент: состояние доступно")
+amb.state = "off"; amb.channel = nil; amb.volume = 0; amb.loading = false
+amb.path = nil; amb.pathTry = 0
+local loopChannel = nil
+local oldPlayFile = sound.PlayFile
+sound.PlayFile = function(path, flags, cb)
+	playedFiles[#playedFiles + 1] = path
+	if (path:find("potence.mp3", 1, true)) then
+		loopChannel = {
+			flags = flags, volume = 0, stopped = false,
+			Play = function(self) self.playing = true end,
+			SetVolume = function(self, v) self.volume = v end,
+			Stop = function(self) self.stopped = true end
+		}
+		cb(loopChannel)
+	else
+		cb(nil)
+	end
+end
+
+fxClient.nw2["afterlightPotenceLevel"] = 2
+fxClient.nw2["afterlightPotenceEnd"] = 1e9
+for _ = 1, 30 do fxTime = fxTime + 0.05; fxHook() end
+check(loopChannel ~= nil and loopChannel.playing, "амбиент: цикл запускается после звука активации")
+check(loopChannel ~= nil and loopChannel.flags:find("loop", 1, true) ~= nil, "амбиент: играет циклом")
+for _ = 1, 30 do fxTime = fxTime + 0.05; fxHook() end
+check(loopChannel ~= nil and loopChannel.volume == ix.potence.AMBIENT_VOLUME,
+	"амбиент: плавно набирает рабочую громкость")
+fxClient.nw2["afterlightPotenceLevel"] = 0
+for _ = 1, 10 do fxTime = fxTime + 0.05; fxHook() end
+check(loopChannel.volume > 0 and loopChannel.volume < ix.potence.AMBIENT_VOLUME and !loopChannel.stopped,
+	"амбиент: затухает плавно, а не мгновенно")
+for _ = 1, 20 do fxTime = fxTime + 0.05; fxHook() end
+check(loopChannel.stopped, "амбиент: останавливается после полного затухания")
+sound.PlayFile = oldPlayFile
 
 io.write(string.format("Проверок Могущества: %d, провалено: %d\n", checks, failures))
 if (failures > 0) then os.exit(1) end

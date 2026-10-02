@@ -17,6 +17,8 @@ resource.AddFile("sound/" .. ix.potence.SOUND_CRACK)
 resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_a.png")
 resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_b.png")
 resource.AddFile("materials/afterlight/disciplines/potence/potence_fx_c.png")
+resource.AddFile("sound/" .. ix.potence.SOUND_LOOP)
+resource.AddFile("sound/" .. ix.potence.SOUND_LOOP_LEGACY)
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 

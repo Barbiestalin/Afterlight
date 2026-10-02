@@ -14,6 +14,14 @@ ix.potence.SOUND_PUNCH = "afterlight/disciplines/potence/punch.mp3"  -- особ
 ix.potence.SOUND_DOOR = "afterlight/disciplines/potence/door.mp3"    -- выбивание двери (4+)
 ix.potence.SOUND_JUMP = "afterlight/disciplines/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
 ix.potence.SOUND_CRACK = "afterlight/disciplines/potence/crack_impact.wav" -- удар земли при прыжке (3+)
+ix.potence.SOUND_LOOP = "afterlight/disciplines/potence/potence.mp3" -- амбиент на время действия (цикл)
+-- путь, куда файл амбиента положен изначально; подхватывается, если в основной папке его нет
+ix.potence.SOUND_LOOP_LEGACY = "disciplines/potence/potence.mp3"
+-- Амбиент: громкость (ниже звука активации, чтобы не перекрикивать), пауза
+-- после звука активации и длительность плавных входа/выхода в секундах.
+ix.potence.AMBIENT_VOLUME = 0.7
+ix.potence.AMBIENT_DELAY = 1.2
+ix.potence.AMBIENT_FADE = 1
 
 -- Громкость личных/зонных звуков Могущества (0..1) — крутить здесь.
 ix.potence.SOUND_VOLUME = 1
