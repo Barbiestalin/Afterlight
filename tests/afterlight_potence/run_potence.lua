@@ -393,18 +393,28 @@ check(joined:find("afterlight/disciplines/potence/punch.mp3", 1, true) ~= nil, "
 check(joined:find("afterlight/disciplines/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
 check(joined:find("afterlight/disciplines/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
 
--- use.mp3 играет ТОЛЬКО у владельца: клиентский обработчик.
-local localSounds = {}
-local localClient = {EmitSound = function(self, path) localSounds[#localSounds + 1] = path end}
-function LocalPlayer() return localClient end
+-- use.mp3 играет ТОЛЬКО у владельца (PlayFile), при отказе декодера — фолбэк.
+local playedFiles = {}
+local playFileDecodes = true
+sound = {PlayFile = function(path, flags, cb)
+	playedFiles[#playedFiles + 1] = path
+	if (playFileDecodes) then
+		cb({Play = function() end})
+	else
+		cb(nil)
+	end
+end}
 file.Exists = function() return true end
 netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
 netHandlers["AfterlightPotenceOwnerSound"]()
-check(#localSounds == 1 and localSounds[1] == ix.potence.SOUND_USE, "use.mp3: играет только владелец")
-file.Exists = function() return false end
+check(#playedFiles == 1 and playedFiles[1] == "sound/" .. ix.potence.SOUND_USE,
+	"use.mp3: играет только владелец")
+playFileDecodes = false
 netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
 netHandlers["AfterlightPotenceOwnerSound"]()
-check(localSounds[2] == ix.potence.SOUND_FALLBACKS.activate, "use.mp3 без файла: фолбэк владельцу")
+check(playedFiles[2] == "sound/" .. ix.potence.SOUND_USE
+	and playedFiles[3] == "sound/" .. ix.potence.SOUND_FALLBACKS.activate,
+	"декодер не осилил файл: фолбэк вместо тишины")
 
 io.write(string.format("Проверок Могущества: %d, провалено: %d\n", checks, failures))
 if (failures > 0) then os.exit(1) end

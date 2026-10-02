@@ -16,13 +16,32 @@ local function MakeRand(seed)
 	end
 end
 
--- Звук использования Могущества — только у владельца: локальный EmitSound,
--- окружающие его не слышат.
+-- Звук использования Могущества — только у владельца: локальное воспроизведение,
+-- окружающие его не слышат. PlayFile терпимее к mp3 (включая MPEG2), а если
+-- движок всё же не сможет декодировать файл — играем фолбэк вместо тишины.
 net.Receive("AfterlightPotenceOwnerSound", function()
 	local custom = net.ReadString()
 	local fallback = net.ReadString()
-	local path = file.Exists("sound/" .. custom, "GAME") and custom or fallback
-	LocalPlayer():EmitSound(path, 200)
+
+	local function Play(path)
+		sound.PlayFile("sound/" .. path, "noplay noblock", function(channel)
+			if (IsValid(channel)) then
+				channel:Play()
+			end
+		end)
+	end
+
+	if (file.Exists("sound/" .. custom, "GAME")) then
+		sound.PlayFile("sound/" .. custom, "noplay noblock", function(channel)
+			if (IsValid(channel)) then
+				channel:Play()
+			else
+				Play(fallback)
+			end
+		end)
+	else
+		Play(fallback)
+	end
 end)
 
 net.Receive("AfterlightPotenceStatsChanged", function()
