@@ -11,8 +11,8 @@ local materials = {}
 local function GetFxMaterial(name)
 	local cached = materials[name]
 	if (cached == nil) then
-		cached = file.Exists("materials/afterlight/disciplines/" .. name .. ".vmt", "GAME")
-			and Material("afterlight/disciplines/" .. name) or false
+		cached = file.Exists("materials/afterlight/disciplines/potence/" .. name .. ".vmt", "GAME")
+			and Material("afterlight/disciplines/potence/" .. name) or false
 		materials[name] = cached
 	end
 	return cached or nil

@@ -1,0 +1,6 @@
+"UnlitGeneric"
+{
+	"$basetexture" "afterlight/disciplines/potence/potence_fx_b"
+	"$additive" "1"
+	"$nofog" "1"
+}

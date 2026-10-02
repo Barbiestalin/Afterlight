@@ -441,7 +441,8 @@ function ScrW() return 1920 end
 function ScrH() return 1080 end
 local fxTime = 0
 function RealTime() return fxTime end
-file.Exists = function() return true end
+local fxExistsPaths = {}
+file.Exists = function(path) fxExistsPaths[#fxExistsPaths + 1] = path; return true end
 local fxDraws = 0
 surface = {
 	SetDrawColor = function() end,
@@ -456,6 +457,15 @@ fxClient.nw2["afterlightPotenceLevel"] = 3
 fxClient.nw2["afterlightPotenceEnd"] = 1e9
 for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end
 check(ix.potence.fx.alpha == 1 and fxDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
+local function FxPathWanted(want)
+	for _, path in ipairs(fxExistsPaths) do
+		if (path == want) then return true end
+	end
+	return false
+end
+check(FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_a.vmt")
+	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_b.vmt"),
+	"аура: материалы ищутся в afterlight/disciplines/potence")
 fxClient.nw2["afterlightPotenceLevel"] = 0
 for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end
 check(ix.potence.fx.alpha == 0, "аура: плавно гаснет за 1 секунду")
