@@ -50,6 +50,10 @@ end
 vectorMeta.__mul = function(v, s) return setmetatable({x = v.x * s, y = v.y * s, z = v.z * s}, vectorMeta) end
 vectorMeta.__sub = function(a, b) return setmetatable({x = a.x - b.x, y = a.y - b.y, z = a.z - b.z}, vectorMeta) end
 vectorMeta.__add = function(a, b) return setmetatable({x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}, vectorMeta) end
+function vectorMeta:Distance(other)
+	local dx, dy, dz = self.x - other.x, self.y - other.y, self.z - other.z
+	return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
 function Vector(x, y, z) return setmetatable({x = x or 0, y = y or 0, z = z or 0}, vectorMeta) end
 
 DMG_SLASH = 8
@@ -150,6 +154,7 @@ local victim = make_entity("player", true)
 victim.pos = Vector(100, 0, 0)
 local character = {GetPlayer = function() return attacker end}
 attacker.character = character
+player = {GetAll = function() return {attacker, victim} end}
 
 -- Активация уровня 3: NW2, таймер, бонус Силы.
 local ok, reason = PLUGIN:ActivatePotence(attacker, character, 3)
@@ -181,8 +186,17 @@ victim.vel = nil
 PLUGIN:EntityTakeDamage(victim, damageInfo)
 check(damageInfo.damage == 5 + 40, "урон кулаков +40 (уровень 5)")
 check(victim.vel and math.abs(victim.vel.x - 850) < 0.01 and victim.vel.z == 0, "отброс 850 ед/с от атакующего")
-check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitHeavy,
-	"удар уровня 5: особый звук поверх обычного (фолбэк до добавления файла)")
+local function LastAreaSound()
+	for index = #netLog, 1, -1 do
+		if (netLog[index].name == "AfterlightPotenceAreaSound") then return netLog[index] end
+	end
+end
+local area = LastAreaSound()
+check(area ~= nil and area.strings[1] == ix.potence.SOUND_PUNCH
+	and area.strings[2] == ix.potence.SOUND_FALLBACKS.hitHeavy,
+	"удар уровня 5: особый звук рассылается в радиусе (фолбэк до добавления файла)")
+check(area ~= nil and istable(area.target) and area.target[1] == attacker,
+	"удар уровня 5: слушатели в радиусе получают звук")
 local ownerSounds = 0
 for _, entry in ipairs(netLog) do
 	if (entry.name == "AfterlightPotenceOwnerSound" and entry.target == attacker
@@ -203,14 +217,15 @@ bulletInfo.GetDamageType = damageInfo.GetDamageType
 bulletInfo.IsDamageType = damageInfo.IsDamageType
 PLUGIN:EntityTakeDamage(victim, bulletInfo)
 check(bulletInfo.damage == 10, "огнестрел без добавочного урона")
-check(#attacker.sounds == 0, "огнестрел без особого звука")
+check(LastAreaSound() == area, "огнестрел без особого звука")
 
 -- Дверь выбивается на уровне 4+.
 local door = make_entity("prop_door_rotating", false)
 PLUGIN:EntityTakeDamage(door, damageInfo)
 check(door.fired[1] == "unlock" and door.fired[2] == "open", "дверь: unlock затем open")
-check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitHeavy, "удар по двери: особый звук")
-attacker.sounds = {}
+local areaDoor = LastAreaSound()
+check(areaDoor ~= nil and areaDoor ~= area and areaDoor.strings[2] == ix.potence.SOUND_FALLBACKS.hitHeavy,
+	"удар по двери: особый звук в радиусе")
 
 -- Уровень 2: дверь НЕ выбивается.
 PLUGIN:ActivatePotence(attacker, character, 2)
@@ -226,9 +241,9 @@ info2.IsDamageType = damageInfo.IsDamageType
 PLUGIN:EntityTakeDamage(door2, info2)
 check(#door2.fired == 0, "уровень 2: дверь не выбивается")
 check(info2.damage == 5 + 20, "урон +20 на уровне 2")
-check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitLight,
-	"удар уровня 2: лёгкий особый звук")
-attacker.sounds = {}
+local area2 = LastAreaSound()
+check(area2 ~= nil and area2 ~= area and area2.strings[2] == ix.potence.SOUND_FALLBACKS.hitLight,
+	"удар уровня 2: лёгкий особый звук в радиусе")
 
 -- Прыжок: уровень 1 — без трейла и без подмены скорости.
 local trailsCreated = 0
@@ -399,11 +414,12 @@ local playFileDecodes = true
 sound = {PlayFile = function(path, flags, cb)
 	playedFiles[#playedFiles + 1] = path
 	if (playFileDecodes) then
-		cb({Play = function() end})
+		cb({Play = function() end, SetVolume = function() end})
 	else
 		cb(nil)
 	end
 end}
+check(netHandlers["AfterlightPotenceAreaSound"] ~= nil, "зонный звук удара: обработчик зарегистрирован")
 file.Exists = function() return true end
 netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
 netHandlers["AfterlightPotenceOwnerSound"]()

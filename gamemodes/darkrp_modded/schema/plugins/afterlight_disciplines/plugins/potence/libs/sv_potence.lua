@@ -3,6 +3,7 @@ local PLUGIN = PLUGIN
 util.AddNetworkString("AfterlightPotenceJumpFX")
 util.AddNetworkString("AfterlightPotenceStatsChanged")
 util.AddNetworkString("AfterlightPotenceOwnerSound")
+util.AddNetworkString("AfterlightPotenceAreaSound")
 
 -- Файлы появятся позже (звуки из открытых источников); регистрируем пути
 -- заранее, чтобы клиенты скачали их сразу после добавления.
@@ -31,6 +32,23 @@ local function EmitWithFallback(entity, customPath, fallbackPath, volume)
 	elseif (fallbackPath) then
 		entity:EmitSound(fallbackPath, volume or 80)
 	end
+end
+
+-- Звук удара шлётся клиентам в радиусе и играется каждым локально через
+-- PlayFile на полной громкости: серверный EmitSound режет mp3 заметно тише,
+-- из-за чего удар было «либо не слышно, либо очень плохо».
+function PLUGIN:BroadcastPotenceSound(origin, customPath, fallbackPath, radius)
+	local listeners = {}
+	for _, listener in ipairs(player.GetAll()) do
+		if (IsValid(listener) and listener:GetPos():Distance(origin:GetPos()) <= radius) then
+			listeners[#listeners + 1] = listener
+		end
+	end
+	if (#listeners == 0) then return end
+	net.Start("AfterlightPotenceAreaSound")
+		net.WriteString(customPath)
+		net.WriteString(fallbackPath)
+	net.Send(listeners)
 end
 
 local function TimerName(client)
@@ -155,8 +173,9 @@ function PLUGIN:EntityTakeDamage(victim, damageInfo)
 
 	-- Особый звук удара поверх стандартного звука оружия (с уровня 2).
 	if (level >= 2) then
-		EmitWithFallback(attacker, ix.potence.SOUND_PUNCH,
-			level >= 3 and ix.potence.SOUND_FALLBACKS.hitHeavy or ix.potence.SOUND_FALLBACKS.hitLight, 90)
+		self:BroadcastPotenceSound(attacker, ix.potence.SOUND_PUNCH,
+			level >= 3 and ix.potence.SOUND_FALLBACKS.hitHeavy or ix.potence.SOUND_FALLBACKS.hitLight,
+			ix.potence.PUNCH_RADIUS)
 	end
 end
 

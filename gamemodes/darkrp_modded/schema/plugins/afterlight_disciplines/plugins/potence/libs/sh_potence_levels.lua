@@ -15,6 +15,11 @@ ix.potence.SOUND_DOOR = "afterlight/disciplines/potence/door.mp3"    -- выби
 ix.potence.SOUND_JUMP = "afterlight/disciplines/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
 ix.potence.SOUND_CRACK = "afterlight/disciplines/potence/crack_impact.wav" -- удар земли при прыжке (3+)
 
+-- Громкость личных/зонных звуков Могущества (0..1) — крутить здесь.
+ix.potence.SOUND_VOLUME = 1
+-- Радиус слышимости удара (ед.; 300 ≈ 7.5 метров) — крутить здесь.
+ix.potence.PUNCH_RADIUS = 300
+
 ix.potence.SOUND_FALLBACKS = {
 	jump = "npc/vort/claw_swing2.wav",
 	crack = "physics/concrete/concrete_break2.wav",

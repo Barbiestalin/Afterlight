@@ -16,33 +16,38 @@ local function MakeRand(seed)
 	end
 end
 
--- Звук использования Могущества — только у владельца: локальное воспроизведение,
--- окружающие его не слышат. PlayFile терпимее к mp3 (включая MPEG2), а если
--- движок всё же не сможет декодировать файл — играем фолбэк вместо тишины.
-net.Receive("AfterlightPotenceOwnerSound", function()
+-- Звук использования Могущества — только у владельца; звук удара — у всех в
+-- радиусе. Оба играются локально через PlayFile (громкость — SOUND_VOLUME),
+-- он терпимее к mp3 (включая MPEG2), а если движок не сможет декодировать
+-- файл — играем фолбэк вместо тишины.
+local function PlayPotenceFile(path)
+	sound.PlayFile("sound/" .. path, "noplay noblock", function(channel)
+		if (IsValid(channel)) then
+			channel:SetVolume(ix.potence.SOUND_VOLUME or 1)
+			channel:Play()
+		end
+	end)
+end
+
+local function ReceivePotenceSound()
 	local custom = net.ReadString()
 	local fallback = net.ReadString()
-
-	local function Play(path)
-		sound.PlayFile("sound/" .. path, "noplay noblock", function(channel)
-			if (IsValid(channel)) then
-				channel:Play()
-			end
-		end)
-	end
-
 	if (file.Exists("sound/" .. custom, "GAME")) then
 		sound.PlayFile("sound/" .. custom, "noplay noblock", function(channel)
 			if (IsValid(channel)) then
+				channel:SetVolume(ix.potence.SOUND_VOLUME or 1)
 				channel:Play()
 			else
-				Play(fallback)
+				PlayPotenceFile(fallback)
 			end
 		end)
 	else
-		Play(fallback)
+		PlayPotenceFile(fallback)
 	end
-end)
+end
+
+net.Receive("AfterlightPotenceOwnerSound", ReceivePotenceSound)
+net.Receive("AfterlightPotenceAreaSound", ReceivePotenceSound)
 
 net.Receive("AfterlightPotenceStatsChanged", function()
 	hook.Run("AfterlightVTMTemporaryBonusesChanged", LocalPlayer():GetCharacter())
