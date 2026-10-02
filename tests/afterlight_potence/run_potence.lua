@@ -363,7 +363,7 @@ check(hudChunk ~= nil, "cl_buff_hud.lua: синтаксис без ошибок"
 local containerChunk = loadfile(root .. "gamemodes/darkrp_modded/schema/plugins/afterlight_disciplines/sh_plugin.lua")
 check(containerChunk ~= nil, "контейнер afterlight_disciplines: синтаксис без ошибок")
 
-function Material(path) return {path = path} end
+function Material(path) return {path = path, IsError = function() return false end} end
 
 -- Клиентский порядок включения libs (алфавитный): cl_potence.lua идёт РАНЬШЕ
 -- sh_potence_levels.lua. Клиентский файл обязан пережить отсутствие ix.potence.
@@ -463,8 +463,8 @@ local function FxPathWanted(want)
 	end
 	return false
 end
-check(FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_a.vmt")
-	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_b.vmt"),
+check(FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_a.png")
+	and FxPathWanted("materials/afterlight/disciplines/potence/potence_fx_b.png"),
 	"аура: материалы ищутся в afterlight/disciplines/potence")
 fxClient.nw2["afterlightPotenceLevel"] = 0
 for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end

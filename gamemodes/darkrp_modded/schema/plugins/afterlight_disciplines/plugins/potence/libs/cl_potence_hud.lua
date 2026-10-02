@@ -1,21 +1,32 @@
 local PLUGIN = PLUGIN
 
 -- Кровавая аура Могущества по краям экрана (эстетика VTM Bloodlines):
--- два аддитивных слоя красных молний, пульсация, мерцание-обрывы,
+-- два слоя красных молний (прозрачность запечена в png), пульсация, мерцание-обрывы,
 -- плавные появление и затухание за 1 секунду.
 ix.potence.fx = ix.potence.fx or {alpha = 0, nextSwap = 0, layer = 1, flicker = 1}
 
 local LAYERS = {"potence_fx_a", "potence_fx_b"}
 local materials = {}
 
+-- Прозрачность запечена в сам PNG (чёрный = прозрачный), поэтому vmt не
+-- нужен: стандартный png подхватывается Material() напрямую. Если файла
+-- ещё нет у клиента или материал битый (error-«шахматка») — не рисуем
+-- ничего и пробуем снова через 5 секунд, чтобы экран не закрывался магентой.
 local function GetFxMaterial(name)
-	local cached = materials[name]
-	if (cached == nil) then
-		cached = file.Exists("materials/afterlight/disciplines/potence/" .. name .. ".vmt", "GAME")
-			and Material("afterlight/disciplines/potence/" .. name) or false
-		materials[name] = cached
+	local now = RealTime()
+	local entry = materials[name]
+	if (entry and (entry.mat or now < entry.nextTry)) then
+		return entry.mat
 	end
-	return cached or nil
+
+	local path = "afterlight/disciplines/potence/" .. name .. ".png"
+	local mat = file.Exists("materials/" .. path, "GAME") and Material(path) or nil
+	if (mat and mat:IsError()) then
+		mat = nil
+	end
+
+	materials[name] = {mat = mat, nextTry = now + 5}
+	return mat
 end
 
 hook.Add("HUDPaint", "AfterlightPotenceScreenFx", function()
