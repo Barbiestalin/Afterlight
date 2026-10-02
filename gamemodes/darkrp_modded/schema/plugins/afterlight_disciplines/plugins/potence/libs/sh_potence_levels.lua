@@ -6,14 +6,14 @@ ix.potence.UNITS_PER_METER = 39.37
 -- Трещина на земле (уровни 3+) живёт 8 секунд серверного времени.
 ix.potence.CRACK_LIFETIME = 8
 
--- ЗВУКИ. Свои файлы use/punch/door лежат в ветке (sound/afterlight/potence)
+-- ЗВУКИ. Свои файлы use/punch/door лежат в ветке (sound/afterlight/disciplines/potence)
 -- и раздаются клиентам (resource.AddFile). Пока своего файла нет, играет
 -- стоковый фолбэк из SOUND_FALLBACKS (эффект слышен сразу).
-ix.potence.SOUND_USE = "afterlight/potence/use.mp3"      -- звучит при активации/использовании Могущества
-ix.potence.SOUND_PUNCH = "afterlight/potence/punch.mp3"  -- особый удар (2+), поверх стандартного звука HL2
-ix.potence.SOUND_DOOR = "afterlight/potence/door.mp3"    -- выбивание двери (4+)
-ix.potence.SOUND_JUMP = "afterlight/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
-ix.potence.SOUND_CRACK = "afterlight/potence/crack_impact.wav" -- удар земли при прыжке (3+)
+ix.potence.SOUND_USE = "afterlight/disciplines/potence/use.mp3"      -- звучит при активации/использовании Могущества
+ix.potence.SOUND_PUNCH = "afterlight/disciplines/potence/punch.mp3"  -- особый удар (2+), поверх стандартного звука HL2
+ix.potence.SOUND_DOOR = "afterlight/disciplines/potence/door.mp3"    -- выбивание двери (4+)
+ix.potence.SOUND_JUMP = "afterlight/disciplines/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
+ix.potence.SOUND_CRACK = "afterlight/disciplines/potence/crack_impact.wav" -- удар земли при прыжке (3+)
 
 ix.potence.SOUND_FALLBACKS = {
 	jump = "npc/vort/claw_swing2.wav",

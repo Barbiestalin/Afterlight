@@ -388,10 +388,10 @@ end
 
 -- Пути звуков зарезервированы для будущих файлов.
 local joined = table.concat(addedFiles, "|")
-check(joined:find("afterlight/potence/use.mp3", 1, true) ~= nil, "звук использования use.mp3 зарегистрирован")
-check(joined:find("afterlight/potence/punch.mp3", 1, true) ~= nil, "звук удара punch.mp3 зарегистрирован")
-check(joined:find("afterlight/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
-check(joined:find("afterlight/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
+check(joined:find("afterlight/disciplines/potence/use.mp3", 1, true) ~= nil, "звук использования use.mp3 зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/punch.mp3", 1, true) ~= nil, "звук удара punch.mp3 зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
 
 -- use.mp3 играет ТОЛЬКО у владельца: клиентский обработчик.
 local localSounds = {}
