@@ -372,6 +372,7 @@ local clientIncludeOk = pcall(function()
 	PLUGIN = {}
 	dofile(base .. "libs/cl_potence.lua")
 	dofile(base .. "libs/sh_potence_levels.lua")
+	dofile(base .. "libs/cl_potence_hud.lua")
 end)
 check(clientIncludeOk, "клиентский порядок включения: cl раньше sh — без ошибки")
 check(ix.potence ~= nil and ix.potence.CRACK_LIFETIME == 8, "после обоих включений ix.potence собран")
@@ -431,6 +432,36 @@ netHandlers["AfterlightPotenceOwnerSound"]()
 check(playedFiles[2] == "sound/" .. ix.potence.SOUND_USE
 	and playedFiles[3] == "sound/" .. ix.potence.SOUND_FALLBACKS.activate,
 	"декодер не осилил файл: фолбэк вместо тишины")
+
+-- Экранная аура: плавные вход/выход по 1 секунде, отрисовка только пока видна.
+local fxClient = make_entity("player", true)
+function LocalPlayer() return fxClient end
+function FrameTime() return 0.05 end
+function ScrW() return 1920 end
+function ScrH() return 1080 end
+local fxTime = 0
+function RealTime() return fxTime end
+file.Exists = function() return true end
+local fxDraws = 0
+surface = {
+	SetDrawColor = function() end,
+	SetMaterial = function() end,
+	DrawPoly = function() end,
+	DrawTexturedRect = function() fxDraws = fxDraws + 1 end
+}
+
+local fxHook = hookStore["HUDPaint"]
+check(fxHook ~= nil, "аура: HUD-хук зарегистрирован")
+fxClient.nw2["afterlightPotenceLevel"] = 3
+fxClient.nw2["afterlightPotenceEnd"] = 1e9
+for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end
+check(ix.potence.fx.alpha == 1 and fxDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
+fxClient.nw2["afterlightPotenceLevel"] = 0
+for _ = 1, 25 do fxTime = fxTime + 0.05; fxHook() end
+check(ix.potence.fx.alpha == 0, "аура: плавно гаснет за 1 секунду")
+local drawsAfterFade = fxDraws
+fxHook()
+check(fxDraws == drawsAfterFade, "аура: после затухания больше не рисуется")
 
 io.write(string.format("Проверок Могущества: %d, провалено: %d\n", checks, failures))
 if (failures > 0) then os.exit(1) end
