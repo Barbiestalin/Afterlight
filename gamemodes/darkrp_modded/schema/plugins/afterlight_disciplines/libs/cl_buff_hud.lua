@@ -29,6 +29,21 @@ local buffEntries = {
 		end
 	},
 	{
+		icon = "afterlight/disciplines/icons/celerity.png",
+		GetRemaining = function(client)
+			local level = client:GetNW2Int("afterlightCelerityLevel", 0)
+			local ends = client:GetNW2Float("afterlightCelerityEnd", 0)
+			if (level > 0 and ends > CurTime()) then
+				local label = "Стремительность " .. level
+				local dodges = client:GetNW2Int("afterlightCelerityDodges", 0)
+				if (dodges > 0) then
+					label = label .. "  ·  укл. " .. dodges
+				end
+				return ends - CurTime(), label
+			end
+		end
+	},
+	{
 		icon = "afterlight/disciplines/icons/vampire_abilities.png",
 		GetRemaining = function(client)
 			local ends = client:GetNW2Float("afterlightBloodBuffEnd", 0)

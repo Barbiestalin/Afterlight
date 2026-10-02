@@ -55,3 +55,7 @@ echo "### Стенд тултипа VTM-листа ($LUAJIT)"
 echo
 echo "### Стенд Могущества ($LUAJIT)"
 "$LUAJIT" "$ROOT/tests/afterlight_potence/run_potence.lua"
+
+echo
+echo "### Стенд Стремительности ($LUAJIT)"
+"$LUAJIT" "$ROOT/tests/afterlight_celerity/run_celerity.lua"
