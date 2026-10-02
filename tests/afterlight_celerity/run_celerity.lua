@@ -46,6 +46,7 @@ DMG_CLUB = 128
 DMG_BULLET = 2
 DMG_BUCKSHOT = 16
 IN_RELOAD = 13
+vector_origin = {x = 0, y = 0, z = 0}
 
 local currentTime = 1000
 function CurTime() return currentTime end
@@ -84,10 +85,20 @@ addedFiles = {}
 resource = {AddFile = function(path) addedFiles[#addedFiles + 1] = path end}
 
 trails = {}
+ents = {Create = function(class)
+	local ent = {class = class, removed = false}
+	ent.Remove = function(self) self.removed = true end
+	ent.SetModel = function() end
+	ent.SetNoDraw = function() end
+	ent.SetParent = function(self, parent, bone) self.parent = parent; self.bone = bone end
+	ent.SetLocalPos = function() end
+	ent.Spawn = function() end
+	return ent
+end}
 util = {
 	AddNetworkString = function() end,
 	SpriteTrail = function(entity, attach, color, additive, startW, endW, life, res, material)
-		local trail = {entity = entity, startW = startW, material = material, removed = false}
+		local trail = {entity = entity, startW = startW, material = material, additive = additive, removed = false}
 		trail.Remove = function(self) self.removed = true end
 		trails[#trails + 1] = trail
 		return trail
@@ -147,17 +158,20 @@ local function make_entity(class, isPlayer)
 	entity.SetRunSpeed = function(self, value) self.runSpeed = value end
 	entity.GetActiveWeapon = function(self) return self.weapon end
 	entity.Alive = function() return true end
+	entity.LookupBone = function() return 5 end
 	return entity
 end
 
-local function make_weapon(class, melee)
-	local weapon = {class = class, nextP = 0, nextS = 0, rate = 1, IsMelee = melee}
+local function make_weapon(class, melee, maxclip, clip)
+	local weapon = {class = class, nextP = 0, nextS = 0, rate = 1, IsMelee = melee, clip = clip or 0, maxclip = maxclip or -1}
 	weapon.GetClass = function(self) return self.class end
 	weapon.GetNextPrimaryFire = function(self) return self.nextP end
 	weapon.SetNextPrimaryFire = function(self, v) self.nextP = v end
 	weapon.GetNextSecondaryFire = function(self) return self.nextS end
 	weapon.SetNextSecondaryFire = function(self, v) self.nextS = v end
 	weapon.SetPlaybackRate = function(self, v) self.rate = v end
+	weapon.Clip1 = function(self) return self.clip end
+	weapon.GetMaxClip1 = function(self) return self.maxclip end
 	return weapon
 end
 
@@ -174,7 +188,17 @@ check(math.abs(client:GetNW2Float("afterlightCelerityEnd", 0) - (currentTime + 1
 check(PLUGIN:GetActiveLevel(client) == 3, "GetActiveLevel = 3")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "dexterity") == 3, "бонус Ловкости +3 в чарлисте")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "strength") == nil, "бонус только к Ловкости")
-check(#trails == 1 and trails[1].entity == client and not trails[1].removed, "уровень 3: трейл воздуха создан")
+local tr = trails[1]
+check(#trails == 1 and not tr.removed and tr.additive == true
+	and tr.material == "afterlight/disciplines/celerity/celerity_trail.png",
+	"уровень 3: собственный трейл «разорванного воздуха»")
+check(tr.entity ~= client and tr.entity.parent == client and tr.entity.bone == 5,
+	"трейл идёт из-за спины: якорь на кости груди")
+local hasTrailMat = false
+for _, added in ipairs(addedFiles) do
+	if (added == "materials/afterlight/disciplines/celerity/celerity_trail.png") then hasTrailMat = true end
+end
+check(hasTrailMat, "текстура трейла раздаётся клиентам")
 local ownerNet = 0
 for _, entry in ipairs(netLog) do
 	if (entry.name == "AfterlightCelerityOwnerSound" and entry.target == client) then ownerNet = ownerNet + 1 end
@@ -183,7 +207,7 @@ check(ownerNet == 1, "звук активации — персональный n
 
 -- Скорость выставляется в Think и снимается после окончания.
 PLUGIN:Think()
-check(client.walkSpeed == math.Round(130 * 1.35) and client.runSpeed == math.Round(260 * 1.5),
+check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Round(260 * 2),
 	"уровень 3: ходьба и спринт ускорены")
 
 -- Темп ближнего боя: кулдаун кулаков сгорает быстрее.
@@ -199,13 +223,32 @@ local function make_cmd(reload)
 	return {keys = {[IN_RELOAD] = reload}, KeyDown = function(self, key) return self.keys[key] == true end}
 end
 PLUGIN:StartCommand(client, make_cmd(false))
-check(hands.rate == 1.5, "анимация ближнего боя ускорена")
-local pistol = make_weapon("weapon_pistol", false)
+check(hands.rate == 1.8, "анимация ближнего боя ускорена")
+local crowbar = make_weapon("weapon_crowbar", false, -1)
+client.weapon = crowbar
+crowbar.nextP = currentTime + 1
+PLUGIN:StartCommand(client, make_cmd(false))
+check(crowbar.rate == 1.8, "милие без магазина (crowbar) распознано и ускорено")
+currentTime = currentTime + 0.05
+PLUGIN:Think()
+check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее")
+local pistol = make_weapon("weapon_pistol", false, 18, 5)
 client.weapon = pistol
 PLUGIN:StartCommand(client, make_cmd(false))
 check(pistol.rate == 1, "огнестрел вне перезарядки в обычном темпе")
 PLUGIN:StartCommand(client, make_cmd(true))
-check(pistol.rate == 1.5, "перезарядка огнестрела ускорена")
+check(pistol.rate == 1.8, "перезарядка огнестрела ускорена")
+pistol.nextP = currentTime + 2
+PLUGIN:StartCommand(client, make_cmd(true))
+check(pistol.afterlightReloading == true, "перезарядка распознана: клавиша зажата, магазин не полон")
+currentTime = currentTime + 0.05
+PLUGIN:Think()
+check(pistol.nextP < currentTime + 1.95, "таймер перезарядки сгорает быстрее — перезарядка короче")
+PLUGIN:StartCommand(client, make_cmd(false))
+local fixedNext = pistol.nextP
+currentTime = currentTime + 0.05
+PLUGIN:Think()
+check(math.abs(pistol.nextP - fixedNext) < 0.001, "вне перезарядки темп огнестрела не трогается")
 
 -- Уклонения: 4-й уровень — только ближний бой, 3 раза.
 PLUGIN:ActivateCelerity(client, character, 4)
@@ -214,13 +257,16 @@ check(trails[1].removed == true and #trails == 2 and trails[2].startW > trails[1
 	"уровень 4: старый трейл снят, новый шире")
 local function damageInfoOf(dmgType)
 	return {
-		type = dmgType,
+		type = dmgType, damage = 10,
 		GetDamageType = function(self) return self.type end,
+		SetDamage = function(self, value) self.damage = value end,
 		GetInflictor = function() return hands end
 	}
 end
-local result = PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH))
-check(result == 0 and client:GetNW2Int("afterlightCelerityDodges", 0) == 2, "уровень 4: ближний удар уклонён (осталось 2)")
+local slashInfo = damageInfoOf(DMG_SLASH)
+local result = PLUGIN:EntityTakeDamage(client, slashInfo)
+check(result == 0 and slashInfo.damage == 0 and client:GetNW2Int("afterlightCelerityDodges", 0) == 2,
+	"уровень 4: ближний удар уклонён, урон обнулён в damageInfo (осталось 2)")
 check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_BULLET)) == nil, "уровень 4: пули не уклоняются")
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_CLUB))
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH))
@@ -230,7 +276,8 @@ check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH)) == nil, "посл
 -- 5-й уровень: 5 уклонений, включая огнестрел.
 PLUGIN:ActivateCelerity(client, character, 5)
 check(client:GetNW2Int("afterlightCelerityDodges", 0) == 5, "уровень 5: 5 уклонений")
-check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_BULLET)) == 0, "уровень 5: пуля уклонена")
+local bulletInfo = damageInfoOf(DMG_BULLET)
+check(PLUGIN:EntityTakeDamage(client, bulletInfo) == 0 and bulletInfo.damage == 0, "уровень 5: пуля уклонена, урон обнулён")
 
 -- Окончание действия: таймер чистит состояние, скорость возвращается.
 PLUGIN:ActivateCelerity(client, character, 1)

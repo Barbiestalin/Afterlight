@@ -8,8 +8,9 @@ resource.AddFile("sound/" .. ix.celerity.SOUND_USE)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
 
--- Экранная аура скорости: оверлей светлых штрихов (прозрачность в png).
+-- Экранная аура скорости и своя текстура трейла «разорванного воздуха».
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_a.png")
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -32,6 +33,12 @@ local function RemoveTrail(client)
 		trail:Remove()
 	end
 	client.afterlightCelerityTrail = nil
+
+	local anchor = client.afterlightCelerityTrailAnchor
+	if (IsValid(anchor)) then
+		anchor:Remove()
+	end
+	client.afterlightCelerityTrailAnchor = nil
 end
 
 function PLUGIN:ClearCelerity(client)
@@ -42,17 +49,38 @@ function PLUGIN:ClearCelerity(client)
 	RemoveTrail(client)
 end
 
--- Шлейф «разорванного воздуха» (уровни 3+): на 4+ шире и плотнее.
+-- Шлейф «разорванного воздуха» (уровни 3+): собственная текстура, якорь на
+-- кости груди, чтобы шлейф шёл из-за спины, а не из-под ног; на 4+ шире.
+local TRAIL_MATERIAL = "afterlight/disciplines/celerity/celerity_trail.png"
+
 local function SpawnTrail(client, data)
 	RemoveTrail(client)
 	if ((data.trail or 0) <= 0) then return end
 	local big = data.trail >= 2
+
+	local anchor = nil
+	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
+	if (bone and bone > 0) then
+		anchor = ents.Create("prop_dynamic")
+		if (IsValid(anchor)) then
+			anchor:SetModel("models/props_junk/watermelon01.mdl")
+			anchor:SetNoDraw(true)
+			anchor:SetParent(client, bone)
+			anchor:SetLocalPos(vector_origin)
+			anchor:Spawn()
+		else
+			anchor = nil
+		end
+	end
+
 	-- util.SpriteTrail существует только в server realm; сущность
-	-- env_spritetrail реплицируется клиентам сама.
-	local trail = util.SpriteTrail(client, 0, Color(214, 232, 248, big and 85 or 50), false,
-		big and 26 or 14, big and 6 or 3, 1.2, 0.04, "trails/smoke.vmt")
+	-- env_spritetrail реплицируется клиентам сама. Аддитивный режим даёт
+	-- свечение собственной текстуры воздуха.
+	local trail = util.SpriteTrail(anchor or client, 0, Color(205, 228, 248, big and 120 or 80), true,
+		big and 30 or 18, big and 8 or 5, 0.9, 0.06, TRAIL_MATERIAL)
 	if (IsValid(trail)) then
 		client.afterlightCelerityTrail = trail
+		client.afterlightCelerityTrailAnchor = anchor
 	end
 end
 
@@ -81,11 +109,16 @@ function PLUGIN:ActivateCelerity(client, character, level)
 	return true
 end
 
+-- Ближний бой: кулаки Helix, оружие с флагом IsMelee и любое оружие без
+-- магазина (crowbar и прочие милее-свепы).
 local function IsMeleeWeapon(weapon)
-	return weapon:GetClass() == "ix_hands" or weapon.IsMelee == true
+	if (weapon:GetClass() == "ix_hands" or weapon.IsMelee == true) then
+		return true
+	end
+	return weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() <= 0
 end
 
--- Кулдаун оружия тратится в attack раз быстрее реального времени.
+-- Кулдаун оружия тратится в mult раз быстрее реального времени.
 local function ShrinkWeaponTimer(weapon, getter, setter, mult, dt, now)
 	local nextAt = getter(weapon)
 	if (nextAt and nextAt > now) then
@@ -120,19 +153,28 @@ function PLUGIN:Think()
 			client:SetRunSpeed(wantRun)
 		end
 
-		-- Темп ближнего боя: кулдауны активного милее-оружия сгорают быстрее.
-		if (data and data.attack > 1) then
-			local weapon = client:GetActiveWeapon()
-			if (IsValid(weapon) and IsMeleeWeapon(weapon)) then
+		local weapon = client:GetActiveWeapon()
+		if (IsValid(weapon)) then
+			-- Темп ближнего боя: кулдауны милее сгорают быстрее.
+			if (data and data.attack > 1 and IsMeleeWeapon(weapon)) then
 				ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.attack, dt, now)
 				ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.attack, dt, now)
+			end
+
+			-- Перезарядка огнестрела: движок завершает её по таймеру
+			-- следующего выстрела — сжимаем его, и перезарядка заканчивается
+			-- раньше. Флаг ставится в StartCommand, пока зажата перезарядка.
+			if (data and data.reload > 1 and weapon.afterlightReloading) then
+				ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.reload, dt, now)
+				ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.reload, dt, now)
 			end
 		end
 	end
 end
 
--- Анимации: милее-оружие размахивает быстрее всегда, огнестрел — быстрее
--- крутит анимацию перезарядки, пока зажата клавиша перезарядки.
+-- Анимации: милее размахивает быстрее всегда; огнестрел быстрее крутит
+-- анимацию перезарядки, пока она идёт. Здесь же отмечаем факт перезарядки
+-- (зажата клавиша и магазин не полон) для ускорения её таймера в Think.
 function PLUGIN:StartCommand(client, cmd)
 	local data = nil
 	local level = self:GetActiveLevel(client)
@@ -141,13 +183,20 @@ function PLUGIN:StartCommand(client, cmd)
 	end
 
 	local weapon = client:GetActiveWeapon()
-	if (!IsValid(weapon) or !weapon.SetPlaybackRate) then return end
+	if (!IsValid(weapon)) then return end
 
+	local reloading = false
+	if (data and data.reload > 1 and weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0) then
+		reloading = cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()
+	end
+	weapon.afterlightReloading = reloading
+
+	if (!weapon.SetPlaybackRate) then return end
 	local rate = 1
 	if (data) then
 		if (IsMeleeWeapon(weapon)) then
 			rate = data.attack
-		elseif (data.reload > 1 and cmd:KeyDown(IN_RELOAD)) then
+		elseif (reloading) then
 			rate = data.reload
 		end
 	end
@@ -159,7 +208,8 @@ function PLUGIN:StartCommand(client, cmd)
 end
 
 -- Уклонения (4+): первые data.dodge попаданий за время действия проходят
--- мимо — персонаж «уходит» из-под удара. На 5-м уровне уклоняется и от пуль.
+-- мимо — урон обнуляется в самом damageInfo (Helix игнорирует возврат 0 из
+-- хука, поэтому гасим урон именно так). На 5-м уровне уклоняется и от пуль.
 function PLUGIN:EntityTakeDamage(entity, damageInfo)
 	if (!IsValid(entity) or !entity.IsPlayer or !entity:IsPlayer()) then return end
 
@@ -176,6 +226,7 @@ function PLUGIN:EntityTakeDamage(entity, damageInfo)
 
 	if (melee or (bullet and data.dodgeBullets)) then
 		entity:SetNW2Int("afterlightCelerityDodges", remaining - 1)
+		damageInfo:SetDamage(0)
 		return 0
 	end
 end

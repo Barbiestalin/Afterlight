@@ -152,9 +152,9 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	end
 	fx.env = fx.env + (fx.target - fx.env) * math.min(1, dt * 12)
 
-	local pulse = 0.8 + 0.2 * math.sin(now * 2.6)
-	local base = 0.22 + 0.12 * math.sin(now * 1.6 + 0.5)
-	local strength = math.Clamp((fx.env * 0.75 + base) * pulse, 0, 1)
+	local pulse = 0.85 + 0.15 * math.sin(now * 2.6)
+	local base = 0.45 + 0.2 * math.sin(now * 1.6 + 0.5)
+	local strength = math.Clamp((fx.env * 0.9 + base) * pulse, 0, 1)
 	if (strength <= 0.02) then return end
 
 	local material = GetFxMaterial(now)
