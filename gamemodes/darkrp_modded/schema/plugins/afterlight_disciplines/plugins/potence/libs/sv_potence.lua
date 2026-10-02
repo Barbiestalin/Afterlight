@@ -2,6 +2,7 @@ local PLUGIN = PLUGIN
 
 util.AddNetworkString("AfterlightPotenceJumpFX")
 util.AddNetworkString("AfterlightPotenceStatsChanged")
+util.AddNetworkString("AfterlightPotenceOwnerSound")
 
 -- Файлы появятся позже (звуки из открытых источников); регистрируем пути
 -- заранее, чтобы клиенты скачали их сразу после добавления.
@@ -65,7 +66,12 @@ function PLUGIN:ActivatePotence(client, character, level)
 		end
 	end)
 	self:NotifyStats(character)
-	EmitWithFallback(client, ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate, 200)
+	-- Звук использования слышит ТОЛЬКО сам активировавший: сервер шлёт
+	-- персональный net, клиент играет его локально.
+	net.Start("AfterlightPotenceOwnerSound")
+		net.WriteString(ix.potence.SOUND_USE)
+		net.WriteString(ix.potence.SOUND_FALLBACKS.activate)
+	net.Send(client)
 	return true
 end
 

@@ -16,6 +16,15 @@ local function MakeRand(seed)
 	end
 end
 
+-- Звук использования Могущества — только у владельца: локальный EmitSound,
+-- окружающие его не слышат.
+net.Receive("AfterlightPotenceOwnerSound", function()
+	local custom = net.ReadString()
+	local fallback = net.ReadString()
+	local path = file.Exists("sound/" .. custom, "GAME") and custom or fallback
+	LocalPlayer():EmitSound(path, 200)
+end)
+
 net.Receive("AfterlightPotenceStatsChanged", function()
 	hook.Run("AfterlightVTMTemporaryBonusesChanged", LocalPlayer():GetCharacter())
 end)

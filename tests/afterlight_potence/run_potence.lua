@@ -72,9 +72,17 @@ timer = {
 	Simple = function() end
 }
 
+netLog = {}
+netHandlers = {}
+netReadQueue = {}
 net = {
-	Start = function() end, WriteEntity = function() end, WriteVector = function() end,
-	WriteUInt = function() end, SendPVS = function() end, Send = function() end
+	Start = function(name) netLog[#netLog + 1] = {name = name, strings = {}} end,
+	WriteString = function(value) local entry = netLog[#netLog]; entry.strings[#entry.strings + 1] = value end,
+	WriteEntity = function() end, WriteVector = function() end, WriteUInt = function() end,
+	SendPVS = function() end,
+	Send = function(target) netLog[#netLog].target = target end,
+	Receive = function(name, fn) netHandlers[name] = fn end,
+	ReadString = function() return table.remove(netReadQueue, 1) end
 }
 
 addedFiles = {}
@@ -173,9 +181,16 @@ victim.vel = nil
 PLUGIN:EntityTakeDamage(victim, damageInfo)
 check(damageInfo.damage == 5 + 40, "урон кулаков +40 (уровень 5)")
 check(victim.vel and math.abs(victim.vel.x - 850) < 0.01 and victim.vel.z == 0, "отброс 850 ед/с от атакующего")
-check(#attacker.sounds == 3 and attacker.sounds[3] == ix.potence.SOUND_FALLBACKS.hitHeavy,
+check(#attacker.sounds == 1 and attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.hitHeavy,
 	"удар уровня 5: особый звук поверх обычного (фолбэк до добавления файла)")
-check(attacker.sounds[1] == ix.potence.SOUND_FALLBACKS.activate, "активация уровня: звук при включении")
+local ownerSounds = 0
+for _, entry in ipairs(netLog) do
+	if (entry.name == "AfterlightPotenceOwnerSound" and entry.target == attacker
+		and entry.strings[1] == ix.potence.SOUND_USE) then
+		ownerSounds = ownerSounds + 1
+	end
+end
+check(ownerSounds == 2, "активация: персональный net-звук только владельцу")
 attacker.sounds = {}
 
 -- Огнестрел не получает бонусов.
@@ -337,7 +352,6 @@ function Material(path) return {path = path} end
 
 -- Клиентский порядок включения libs (алфавитный): cl_potence.lua идёт РАНЬШЕ
 -- sh_potence_levels.lua. Клиентский файл обязан пережить отсутствие ix.potence.
-net.Receive = function() end
 local clientIncludeOk = pcall(function()
 	ix = {}
 	PLUGIN = {}
@@ -378,6 +392,19 @@ check(joined:find("afterlight/potence/use.mp3", 1, true) ~= nil, "звук ис�
 check(joined:find("afterlight/potence/punch.mp3", 1, true) ~= nil, "звук удара punch.mp3 зарегистрирован")
 check(joined:find("afterlight/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
 check(joined:find("afterlight/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
+
+-- use.mp3 играет ТОЛЬКО у владельца: клиентский обработчик.
+local localSounds = {}
+local localClient = {EmitSound = function(self, path) localSounds[#localSounds + 1] = path end}
+function LocalPlayer() return localClient end
+file.Exists = function() return true end
+netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
+netHandlers["AfterlightPotenceOwnerSound"]()
+check(#localSounds == 1 and localSounds[1] == ix.potence.SOUND_USE, "use.mp3: играет только владелец")
+file.Exists = function() return false end
+netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
+netHandlers["AfterlightPotenceOwnerSound"]()
+check(localSounds[2] == ix.potence.SOUND_FALLBACKS.activate, "use.mp3 без файла: фолбэк владельцу")
 
 io.write(string.format("Проверок Могущества: %d, провалено: %d\n", checks, failures))
 if (failures > 0) then os.exit(1) end
