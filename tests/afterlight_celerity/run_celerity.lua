@@ -98,7 +98,7 @@ end}
 util = {
 	AddNetworkString = function() end,
 	SpriteTrail = function(entity, attach, color, additive, startW, endW, life, res, material)
-		local trail = {entity = entity, startW = startW, material = material, additive = additive, removed = false}
+		local trail = {entity = entity, attach = attach, startW = startW, material = material, additive = additive, removed = false}
 		trail.Remove = function(self) self.removed = true end
 		trails[#trails + 1] = trail
 		return trail
@@ -118,8 +118,8 @@ dofile(base .. "libs/sh_celerity_levels.lua")
 local spec = {
 	{dexterity = 2, duration = 10, vitae = 2, trail = 0, dodge = 0, dodgeBullets = false},
 	{dexterity = 2, duration = 15, vitae = 4, trail = 0, dodge = 0, dodgeBullets = false},
-	{dexterity = 3, duration = 15, vitae = 5, trail = 1, dodge = 0, dodgeBullets = false},
-	{dexterity = 3, duration = 20, vitae = 8, trail = 2, dodge = 3, dodgeBullets = false},
+	{dexterity = 3, duration = 15, vitae = 5, trail = 1, dodge = 3, dodgeBullets = false},
+	{dexterity = 3, duration = 20, vitae = 8, trail = 2, dodge = 3, dodgeBullets = true},
 	{dexterity = 4, duration = 20, vitae = 10, trail = 2, dodge = 5, dodgeBullets = true}
 }
 for level, expected in ipairs(spec) do
@@ -158,7 +158,7 @@ local function make_entity(class, isPlayer)
 	entity.SetRunSpeed = function(self, value) self.runSpeed = value end
 	entity.GetActiveWeapon = function(self) return self.weapon end
 	entity.Alive = function() return true end
-	entity.LookupBone = function() return 5 end
+	entity.LookupAttachment = function() return 2 end
 	return entity
 end
 
@@ -192,8 +192,8 @@ local tr = trails[1]
 check(#trails == 1 and not tr.removed and tr.additive == true
 	and tr.material == "afterlight/disciplines/celerity/celerity_trail.png",
 	"уровень 3: собственный трейл «разорванного воздуха»")
-check(tr.entity ~= client and tr.entity.parent == client and tr.entity.bone == 5,
-	"трейл идёт из-за спины: якорь на кости груди")
+check(tr.entity == client and tr.attach == 2,
+	"трейл идёт из-за спины: эмиссия с аттачмента головы, не из-под ног")
 local hasTrailMat = false
 for _, added in ipairs(addedFiles) do
 	if (added == "materials/afterlight/disciplines/celerity/celerity_trail.png") then hasTrailMat = true end
@@ -223,12 +223,12 @@ local function make_cmd(reload)
 	return {keys = {[IN_RELOAD] = reload}, KeyDown = function(self, key) return self.keys[key] == true end}
 end
 PLUGIN:StartCommand(client, make_cmd(false))
-check(hands.rate == 1.8, "анимация ближнего боя ускорена")
+check(hands.rate == 1, "анимация и звуковые события ближнего боя не ломаются")
 local crowbar = make_weapon("weapon_crowbar", false, -1)
 client.weapon = crowbar
 crowbar.nextP = currentTime + 1
 PLUGIN:StartCommand(client, make_cmd(false))
-check(crowbar.rate == 1.8, "милие без магазина (crowbar) распознано и ускорено")
+check(crowbar.rate == 1, "анимация crowbar не тронута — звуки ударов на месте")
 currentTime = currentTime + 0.05
 PLUGIN:Think()
 check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее")
@@ -237,7 +237,7 @@ client.weapon = pistol
 PLUGIN:StartCommand(client, make_cmd(false))
 check(pistol.rate == 1, "огнестрел вне перезарядки в обычном темпе")
 PLUGIN:StartCommand(client, make_cmd(true))
-check(pistol.rate == 1.8, "перезарядка огнестрела ускорена")
+check(pistol.rate == 1, "перезарядка ускорена таймером, анимация не ломается")
 pistol.nextP = currentTime + 2
 PLUGIN:StartCommand(client, make_cmd(true))
 check(pistol.afterlightReloading == true, "перезарядка распознана: клавиша зажата, магазин не полон")
@@ -250,11 +250,9 @@ currentTime = currentTime + 0.05
 PLUGIN:Think()
 check(math.abs(pistol.nextP - fixedNext) < 0.001, "вне перезарядки темп огнестрела не трогается")
 
--- Уклонения: 4-й уровень — только ближний бой, 3 раза.
-PLUGIN:ActivateCelerity(client, character, 4)
-check(client:GetNW2Int("afterlightCelerityDodges", 0) == 3, "уровень 4: 3 уклонения")
-check(trails[1].removed == true and #trails == 2 and trails[2].startW > trails[1].startW,
-	"уровень 4: старый трейл снят, новый шире")
+-- Уклонения: с 3-го уровня — от ближнего боя, с 4-го — ещё и от огнестрела.
+PLUGIN:ActivateCelerity(client, character, 3)
+check(client:GetNW2Int("afterlightCelerityDodges", 0) == 3, "уровень 3: 3 уклонения от ближнего")
 local function damageInfoOf(dmgType)
 	return {
 		type = dmgType, damage = 10,
@@ -266,18 +264,26 @@ end
 local slashInfo = damageInfoOf(DMG_SLASH)
 local result = PLUGIN:EntityTakeDamage(client, slashInfo)
 check(result == 0 and slashInfo.damage == 0 and client:GetNW2Int("afterlightCelerityDodges", 0) == 2,
-	"уровень 4: ближний удар уклонён, урон обнулён в damageInfo (осталось 2)")
-check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_BULLET)) == nil, "уровень 4: пули не уклоняются")
+	"уровень 3: ближний удар уклонён, урон обнулён в damageInfo (осталось 2)")
+check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_BULLET)) == nil, "уровень 3: пули ещё не уклоняются")
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_CLUB))
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH))
 check(client:GetNW2Int("afterlightCelerityDodges", 0) == 0, "уклонения потрачены")
 check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH)) == nil, "после 3-х уклонений урон проходит")
 
--- 5-й уровень: 5 уклонений, включая огнестрел.
+PLUGIN:ActivateCelerity(client, character, 4)
+check(client:GetNW2Int("afterlightCelerityDodges", 0) == 3, "уровень 4: 3 уклонения")
+check(trails[#trails].removed == false and trails[#trails].startW > trails[1].startW,
+	"уровень 4: трейл шире, чем на 3-м")
+local bulletInfo = damageInfoOf(DMG_BULLET)
+check(PLUGIN:EntityTakeDamage(client, bulletInfo) == 0 and bulletInfo.damage == 0,
+	"уровень 4: пуля уклонена, урон обнулён")
+
+-- 5-й уровень: 5 уклонений от любого урона.
 PLUGIN:ActivateCelerity(client, character, 5)
 check(client:GetNW2Int("afterlightCelerityDodges", 0) == 5, "уровень 5: 5 уклонений")
-local bulletInfo = damageInfoOf(DMG_BULLET)
-check(PLUGIN:EntityTakeDamage(client, bulletInfo) == 0 and bulletInfo.damage == 0, "уровень 5: пуля уклонена, урон обнулён")
+local bulletInfo5 = damageInfoOf(DMG_BULLET)
+check(PLUGIN:EntityTakeDamage(client, bulletInfo5) == 0 and bulletInfo5.damage == 0, "уровень 5: пуля уклонена, урон обнулён")
 
 -- Окончание действия: таймер чистит состояние, скорость возвращается.
 PLUGIN:ActivateCelerity(client, character, 1)
