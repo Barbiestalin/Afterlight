@@ -106,8 +106,8 @@ ents = {Create = function(class)
 end}
 util = {
 	AddNetworkString = function() end,
-	SpriteTrail = function(entity, attach, color, additive, startW, endW, life, res, material)
-		local trail = {entity = entity, attach = attach, startW = startW, material = material, additive = additive, removed = false}
+	SpriteTrail = function(entity, attach, color, additive, life, startW, endW, res, material)
+		local trail = {entity = entity, attach = attach, life = life, startW = startW, endW = endW, material = material, additive = additive, removed = false}
 		trail.Remove = function(self) self.removed = true end
 		trails[#trails + 1] = trail
 		return trail
@@ -220,6 +220,31 @@ PLUGIN:Think()
 check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Round(260 * 2),
 	"уровень 3: ходьба и спринт ускорены")
 check(client.playRate == 1.15, "внешняя анимация игрока ускорена в меру темпа атаки")
+
+-- Трейл: ленты вдоль движения, только во время фактического спринта на 3+.
+client.vel = Vector(300, 0, 0)
+PLUGIN:Think()
+local speedTrails = client.afterlightCelerityTrails
+check(speedTrails ~= nil and #speedTrails == 2, "трейл: спринт на 3-м уровне рождает две ленты")
+check(speedTrails ~= nil and speedTrails[1].material == "trails/smoke.vmt" and speedTrails[1].removed == false,
+	"трейл: ленты на боевом материале trails/smoke.vmt")
+check(speedTrails ~= nil and speedTrails[1].additive == true and speedTrails[2].additive == false,
+	"трейл: светлая аддитивная лента + тёмная тень = мерцание преломления")
+client.vel = Vector(0, 0, 0)
+PLUGIN:Think()
+check(speedTrails[1].removed == true and speedTrails[2].removed == true and client.afterlightCelerityTrails == nil,
+	"трейл: спринт кончился — ленты сняты в том же кадре")
+PLUGIN:ActivateCelerity(client, character, 2)
+client.vel = Vector(300, 0, 0)
+PLUGIN:Think()
+check(client.afterlightCelerityTrails == nil, "трейл: до 3-го уровня шлейфа нет")
+PLUGIN:ActivateCelerity(client, character, 3)
+PLUGIN:Think()
+check(client.afterlightCelerityTrails ~= nil, "трейл: на 3-м уровне в спринте возвращается")
+PLUGIN:ClearCelerity(client)
+check(client.afterlightCelerityTrails == nil, "трейл: окончание дисциплины снимает ленты")
+PLUGIN:ActivateCelerity(client, character, 3)
+client.vel = nil
 
 -- Темп ближнего боя: кулдаун кулаков сгорает быстрее.
 local hands = make_weapon("ix_hands", true, -1, 0, 0.5)

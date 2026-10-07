@@ -37,6 +37,15 @@ function PLUGIN:ClearCelerity(client)
 		client:SetPlaybackRate(1)
 		client.afterlightRate = 1
 	end
+	-- Ленты шлейфа снимаются сразу.
+	if (client.afterlightCelerityTrails) then
+		for _, trail in ipairs(client.afterlightCelerityTrails) do
+			if (IsValid(trail)) then
+				trail:Remove()
+			end
+		end
+		client.afterlightCelerityTrails = nil
+	end
 end
 
 -- Активация уровня: повторная активация разрешена и сбрасывает таймер,
@@ -137,6 +146,39 @@ local function ShrinkWeaponTimer(weapon, getter, setter, mult, dt, now)
 	end
 end
 
+-- «Преломление воздуха»: ЛЕНТОЧНЫЙ трейл util.SpriteTrail, растянутый вдоль
+-- движения — это именно скоростной шлейф, а не клубы дыма. Светлая ледяная
+-- аддитивная лента плюс тёмная полупрозрачная «тень» вместе читаются как
+-- мерцание преломлённого воздуха. Только во время фактического спринта на 3+,
+-- снимаются в тот же кадр, как спринт кончился. Текстура ленты — боевой
+-- материал trails/smoke.vmt (схема вызова как в pointshop: attach 0).
+local function UpdateSpeedTrail(client, level, data)
+	local sprinting = data ~= nil and level >= 3
+		and client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
+
+	local trails = client.afterlightCelerityTrails
+	if (!sprinting) then
+		if (trails) then
+			for _, trail in ipairs(trails) do
+				if (IsValid(trail)) then
+					trail:Remove()
+				end
+			end
+			client.afterlightCelerityTrails = nil
+		end
+		return
+	end
+
+	if (trails and IsValid(trails[1])) then return end
+
+	local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
+	local bright = util.SpriteTrail(client, 0, Color(170, 205, 240, 70), true,
+		0.35, 4 * scale, 1, 0.125, "trails/smoke.vmt")
+	local shade = util.SpriteTrail(client, 0, Color(6, 10, 16, 50), false,
+		0.28, 9 * scale, 2, 0.125, "trails/smoke.vmt")
+	client.afterlightCelerityTrails = {bright, shade}
+end
+
 local lastThink = 0
 
 function PLUGIN:Think()
@@ -170,6 +212,8 @@ function PLUGIN:Think()
 			client:SetPlaybackRate(wantRate)
 			client.afterlightRate = wantRate
 		end
+
+		UpdateSpeedTrail(client, level, data)
 
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end

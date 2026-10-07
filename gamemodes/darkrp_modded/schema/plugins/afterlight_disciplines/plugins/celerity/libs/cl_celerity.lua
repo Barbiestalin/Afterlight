@@ -6,8 +6,9 @@ ix.celerity = ix.celerity or {}
 
 -- Нуарная аура скорости: процедурная тёмная виньетка + два наложенных слоя
 -- светлых штрихов (png с запечённой прозрачностью), живущих своими вспышками,
--- редкие ветровые штрихи и трейл «разорванного воздуха» частицами — только
--- во время спринта (shift) на 3+. Звук ветра — тоже только при спринте.
+-- редкие ветровые штрихи; шлейф «преломления воздуха» = серверные ленты
+-- util.SpriteTrail + крошечные клиентские искры — только во время фактического
+-- спринта на 3+. Звук ветра — тоже только при спринте.
 ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}, layers = {}}
 
 -- === Личные звуки (активация + ветер при спринте) ===
@@ -107,45 +108,43 @@ net.Receive("AfterlightCelerityOwnerSound", function()
 	end
 end)
 
--- === Трейл «разорванного воздуха» частицами (только спринт на 3+) ===
--- 3D-рендеру нужны штатные материалы (сырой png в частицах даёт error-
--- «шахматку»), поэтому берём стоковые «пар/свечение» и красим в ледяной
--- оттенок — выглядит как рваный воздух за спиной.
--- trails/smoke и particle_smokegrenade — гарантированно существующие материалы
--- (проверены боем на трейле Могущества), в ледяном тоне дают «рваный воздух».
+-- === Искры disturbed-воздуха (только спринт на 3+) ===
+-- Основной шлейф — серверные ЛЕНТЫ util.SpriteTrail, растянутые вдоль движения
+-- (см. sv_celerity.lua): это скоростной шлейф, а не дым. Клиент добавляет лишь
+-- крошечные короткоживущие аддитивные искры мерцания: они НЕ растут в клубы
+-- (размер 1.5-3.5, жизнь 0.1-0.22с) и потому читаются как дрожащий воздух,
+-- а не дым. Материалы — только проверенные боем trails/smoke и
+-- particle_smokegrenade.
 local TRAIL_MATERIALS = {"trails/smoke", "particle/particle_smokegrenade"}
 local trailEmitter = nil
 local lastTrailSpawn = 0
 
 local function UpdateTrail(client, active, level, sprinting, now)
 	if (!active or level < 3 or !sprinting) then return end
-	if (client:GetVelocity():Length2D() < 80) then return end
+	local vel = client:GetVelocity()
+	if (vel:Length2D() < 80) then return end
 	if (now < lastTrailSpawn) then return end
-	lastTrailSpawn = now + 0.035
+	lastTrailSpawn = now + 0.03
 
 	trailEmitter = trailEmitter or ParticleEmitter(client:GetPos())
 	if (!trailEmitter) then return end
 
-	local big = level >= 4
 	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
 	local origin = (bone and bone > 0 and client:GetBonePosition(bone))
 		or (client:GetPos() + Vector(0, 0, 50))
 
-	local material = TRAIL_MATERIALS[math.random(1, #TRAIL_MATERIALS)]
-	local particle = trailEmitter:Add(material,
-		origin + Vector(math.Rand(-3, 3), math.Rand(-3, 3), math.Rand(-2, 4)))
+	local particle = trailEmitter:Add(TRAIL_MATERIALS[math.random(1, #TRAIL_MATERIALS)],
+		origin + Vector(math.Rand(-4, 4), math.Rand(-4, 4), math.Rand(-8, 6)))
 	if (!particle) then return end
 
-	particle:SetDieTime(math.Rand(0.4, 0.8))
-	particle:SetStartAlpha(big and 90 or 60)
+	particle:SetDieTime(math.Rand(0.1, 0.22))
+	particle:SetStartAlpha(50)
 	particle:SetEndAlpha(0)
-	particle:SetStartSize(big and 8 or 5)
-	particle:SetEndSize(big and 30 or 20)
-	particle:SetColor(190, 215, 235)
-	particle:SetVelocity(client:GetVelocity() * -0.12 + Vector(math.Rand(-8, 8), math.Rand(-8, 8), math.Rand(0, 14)))
-	particle:SetGravity(Vector(0, 0, 26))
+	particle:SetStartSize(math.Rand(1.5, 3.5))
+	particle:SetEndSize(0.5)
+	particle:SetColor(205, 228, 246)
+	particle:SetVelocity(vel * -0.22 + Vector(math.Rand(-10, 10), math.Rand(-10, 10), math.Rand(-4, 10)))
 	particle:SetRoll(math.Rand(0, 6.28))
-	particle:SetRollDelta(math.Rand(-1.5, 1.5))
 end
 
 -- === Нуарная экранная аура ===
