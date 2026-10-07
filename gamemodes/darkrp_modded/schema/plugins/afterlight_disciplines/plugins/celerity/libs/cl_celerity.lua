@@ -4,12 +4,13 @@ local PLUGIN = PLUGIN
 -- sh_celerity_levels.lua, поэтому таблицу создаём здесь сами.
 ix.celerity = ix.celerity or {}
 
--- Аура скорости: светлые штрихи по краям экрана на время действия (png с
--- запечённой прозрачностью), звук активации только у владельца и зацикленный
--- амбиент с плавными входом/выходом.
-ix.celerity.fx = ix.celerity.fx or {alpha = 0, env = 0, target = 0, nextFlash = 0}
+-- Нуарная аура скорости: мягкая тёмная виньетка по краям (мир для вампира
+-- «замедляется и темнеет») плюс редкие тонкие штрихи ветра у краёв экрана.
+-- Звук ветра — только при спринте (shift) на 3+ уровне. Звук активации —
+-- только у владельца.
+ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}}
 
--- === Личные звуки (активация + амбиент) ===
+-- === Личные звуки (активация + ветер при спринте) ===
 local ambient = {channel = nil, loading = false, volume = 0, state = "off", startAt = 0, path = nil, pathTry = 0}
 ix.celerity.fx.amb = ambient
 
@@ -80,7 +81,7 @@ end
 
 -- Звук активации слышит только владелец; PlayFile терпим к mp3, а при ошибке
 -- декодирования играет фолбэк вместо тишины.
-local function PlayPotenceFile(path)
+local function PlayCelerityFile(path)
 	sound.PlayFile("sound/" .. path, "noplay noblock", function(channel)
 		if (IsValid(channel)) then
 			channel:SetVolume(ix.celerity.SOUND_VOLUME or 1)
@@ -98,15 +99,16 @@ net.Receive("AfterlightCelerityOwnerSound", function()
 				channel:SetVolume(ix.celerity.SOUND_VOLUME or 1)
 				channel:Play()
 			else
-				PlayPotenceFile(fallback)
+				PlayCelerityFile(fallback)
 			end
 		end)
 	else
-		PlayPotenceFile(fallback)
+		PlayCelerityFile(fallback)
 	end
 end)
 
--- === Экранная аура скорости ===
+-- === Нуарная экранная аура ===
+local VIGNETTE_PATH = "afterlight/disciplines/celerity/celerity_vignette.png"
 local fxMaterial = nil
 local fxTried = 0
 
@@ -116,8 +118,7 @@ local function GetFxMaterial(now)
 	end
 
 	fxTried = now + 5
-	local path = "afterlight/disciplines/celerity/celerity_fx_a.png"
-	local mat = file.Exists("materials/" .. path, "GAME") and Material(path) or nil
+	local mat = file.Exists("materials/" .. VIGNETTE_PATH, "GAME") and Material(VIGNETTE_PATH) or nil
 	if (mat and mat:IsError()) then
 		mat = nil
 	end
@@ -130,13 +131,14 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	if (!IsValid(client)) then return end
 	local fx = ix.celerity.fx
 
-	local active = client:GetNW2Int("afterlightCelerityLevel", 0) > 0
-		and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
+	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
 
 	local dt = FrameTime()
 	local now = RealTime()
 
-	UpdateAmbience(active, now, dt)
+	-- Ветер — только когда на 3+ уровне бежат спринтом (shift).
+	UpdateAmbience(active and level >= 3 and client:KeyDown(IN_SPEED) == true, now, dt)
 
 	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
 	local target = active and 1 or 0
@@ -145,26 +147,53 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	elseif (fx.alpha > target) then
 		fx.alpha = math.max(fx.alpha - dt, 0)
 	end
-	if (fx.alpha <= 0.01) then return end
-
-	-- Светлые штрихи то возникают, то прерываются; между ними аура дышит
-	-- едва заметной постоянной основой.
-	fx.target = fx.target * math.exp(-dt * 2.0)
-	if (now >= fx.nextFlash) then
-		fx.nextFlash = now + math.Rand(0.4, 1.2)
-		fx.target = math.Rand(0.5, 1)
+	if (fx.alpha <= 0.01) then
+		fx.slashes = {}
+		return
 	end
-	fx.env = fx.env + (fx.target - fx.env) * math.min(1, dt * 12)
 
-	local pulse = 0.85 + 0.15 * math.sin(now * 2.6)
-	local base = 0.45 + 0.2 * math.sin(now * 1.6 + 0.5)
-	local strength = math.Clamp((fx.env * 0.9 + base) * pulse, 0, 1)
-	if (strength <= 0.02) then return end
-
+	-- Готическая виньетка: края экрана мягко темнеют, вампир видит мир
+	-- «своим» зрением. Дышит очень медленно и едва заметно.
 	local material = GetFxMaterial(now)
 	if (material) then
-		surface.SetDrawColor(255, 255, 255, math.Clamp(255 * fx.alpha * strength, 0, 255))
+		local breathe = 0.85 + 0.1 * math.sin(now * 1.3)
+		surface.SetDrawColor(255, 255, 255, math.Clamp(255 * fx.alpha * breathe, 0, 255))
 		surface.SetMaterial(material)
 		surface.DrawTexturedRect(0, 0, ScrW(), ScrH())
+	end
+
+	-- Редкие тонкие штрихи ветра у краёв: не чаще нескольких одновременно,
+	-- живут доли секунды — скорость чувствуется, но экран не захламляется.
+	fx.slashes = fx.slashes or {}
+	if (active and #fx.slashes < 4 and math.Rand(0, 1) < dt * 2.5) then
+		local horizontal = math.Rand(0, 1) < 0.7
+		local w, h = ScrW(), ScrH()
+		local slash = {life = 0, max = math.Rand(0.18, 0.4), horizontal = horizontal}
+		if (horizontal) then
+			slash.len = math.Rand(90, 260)
+			slash.x = math.Rand(0, w - slash.len)
+			slash.y = math.Rand(0, 1) < 0.5 and math.Rand(0, h * 0.22) or math.Rand(h * 0.78, h)
+		else
+			slash.len = math.Rand(70, 180)
+			slash.x = math.Rand(0, 1) < 0.5 and math.Rand(0, w * 0.18) or math.Rand(w * 0.82, w)
+			slash.y = math.Rand(0, h - slash.len)
+		end
+		fx.slashes[#fx.slashes + 1] = slash
+	end
+
+	for index = #fx.slashes, 1, -1 do
+		local slash = fx.slashes[index]
+		slash.life = slash.life + dt
+		if (slash.life >= slash.max) then
+			table.remove(fx.slashes, index)
+		else
+			local k = math.sin(math.pi * slash.life / slash.max)
+			surface.SetDrawColor(205, 222, 238, math.Clamp(70 * k * fx.alpha, 0, 255))
+			if (slash.horizontal) then
+				surface.DrawLine(slash.x, slash.y, slash.x + slash.len, slash.y)
+			else
+				surface.DrawLine(slash.x, slash.y, slash.x, slash.y + slash.len)
+			end
+		end
 	end
 end)

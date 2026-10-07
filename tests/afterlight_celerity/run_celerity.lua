@@ -46,6 +46,7 @@ DMG_CLUB = 128
 DMG_BULLET = 2
 DMG_BUCKSHOT = 16
 IN_RELOAD = 13
+IN_SPEED = 2
 vector_origin = {x = 0, y = 0, z = 0}
 
 local currentTime = 1000
@@ -159,6 +160,7 @@ local function make_entity(class, isPlayer)
 	entity.GetActiveWeapon = function(self) return self.weapon end
 	entity.Alive = function() return true end
 	entity.LookupAttachment = function() return 2 end
+	entity.KeyDown = function(self, key) return self.keys ~= nil and self.keys[key] == true end
 	return entity
 end
 
@@ -190,13 +192,14 @@ check(PLUGIN:GetCharacterVTMStatBonus(character, "dexterity") == 3, "бонус 
 check(PLUGIN:GetCharacterVTMStatBonus(character, "strength") == nil, "бонус только к Ловкости")
 local tr = trails[1]
 check(#trails == 1 and not tr.removed and tr.additive == true
-	and tr.material == "afterlight/disciplines/celerity/celerity_trail.png",
-	"уровень 3: собственный трейл «разорванного воздуха»")
+	and tr.material == "afterlight/disciplines/celerity/celerity_trail",
+	"уровень 3: собственный трейл «разорванного воздуха» (vmt с вершинной альфой)")
 check(tr.entity == client and tr.attach == 2,
 	"трейл идёт из-за спины: эмиссия с аттачмента головы, не из-под ног")
 local hasTrailMat = false
 for _, added in ipairs(addedFiles) do
-	if (added == "materials/afterlight/disciplines/celerity/celerity_trail.png") then hasTrailMat = true end
+	if (added == "materials/afterlight/disciplines/celerity/celerity_trail.png"
+			or added == "materials/afterlight/disciplines/celerity/celerity_trail.vmt") then hasTrailMat = true end
 end
 check(hasTrailMat, "текстура трейла раздаётся клиентам")
 local ownerNet = 0
@@ -223,12 +226,12 @@ local function make_cmd(reload)
 	return {keys = {[IN_RELOAD] = reload}, KeyDown = function(self, key) return self.keys[key] == true end}
 end
 PLUGIN:StartCommand(client, make_cmd(false))
-check(hands.rate == 1, "анимация и звуковые события ближнего боя не ломаются")
+check(hands.rate == 1.3, "анимация ближнего боя ускорена ровно в меру темпа — взмах успевает доиграть")
 local crowbar = make_weapon("weapon_crowbar", false, -1)
 client.weapon = crowbar
 crowbar.nextP = currentTime + 1
 PLUGIN:StartCommand(client, make_cmd(false))
-check(crowbar.rate == 1, "анимация crowbar не тронута — звуки ударов на месте")
+check(crowbar.rate == 1.3, "анимация crowbar ускорена в меру темпа — события взмаха на месте")
 currentTime = currentTime + 0.05
 PLUGIN:Think()
 check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее")
@@ -238,17 +241,19 @@ PLUGIN:StartCommand(client, make_cmd(false))
 check(pistol.rate == 1, "огнестрел вне перезарядки в обычном темпе")
 PLUGIN:StartCommand(client, make_cmd(true))
 check(pistol.rate == 1, "перезарядка ускорена таймером, анимация не ломается")
-pistol.nextP = currentTime + 2
 PLUGIN:StartCommand(client, make_cmd(true))
-check(pistol.afterlightReloading == true, "перезарядка распознана: клавиша зажата, магазин не полон")
+check(pistol.afterlightReloadPending == true, "тап перезарядки распознан")
+pistol.nextP = currentTime + 2 -- движок поставил таймер (DefaultReload)
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(pistol.nextP < currentTime + 1.95, "таймер перезарядки сгорает быстрее — перезарядка короче")
-PLUGIN:StartCommand(client, make_cmd(false))
+check(pistol.nextP < currentTime + 2 / 1.6 + 0.01 and pistol.nextP > currentTime + 0.5,
+	"перезарядка сжата пропорционально уровню (уровень 3: /1.6)")
 local fixedNext = pistol.nextP
+PLUGIN:StartCommand(client, make_cmd(true))
+check(not pistol.afterlightReloadPending, "повторный тап в той же перезарядке не пересчитывает таймер")
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(math.abs(pistol.nextP - fixedNext) < 0.001, "вне перезарядки темп огнестрела не трогается")
+check(math.abs(pistol.nextP - fixedNext) < 0.001, "перезарядка сжимается один раз, темп стрельбы не трогается")
 
 -- Уклонения: с 3-го уровня — от ближнего боя, с 4-го — ещё и от огнестрела.
 PLUGIN:ActivateCelerity(client, character, 3)
@@ -325,6 +330,7 @@ local fxDraws = 0
 surface = {
 	SetDrawColor = function() end,
 	SetMaterial = function() end,
+	DrawLine = function() end,
 	DrawTexturedRect = function() fxDraws = fxDraws + 1 end
 }
 
@@ -362,22 +368,31 @@ check(playedFiles[1] == "sound/" .. ix.celerity.SOUND_USE, "звук актив�
 -- Аура и амбиент: плавный вход, отрисовка, плавный выход и остановка петли.
 local fxHook = hookStore["HUDPaint"]
 check(fxHook ~= nil, "аура скорости: HUD-хук зарегистрирован")
+client.keys = {}
 client.nw2["afterlightCelerityLevel"] = 2
 client.nw2["afterlightCelerityEnd"] = 1e9
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and fxDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
-check(loopChannel ~= nil and loopChannel.playing, "амбиент: цикл запущен")
+check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
+client.nw2["afterlightCelerityLevel"] = 3
+for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(loopChannel == nil, "ветер молчит: 3-й уровень без спринта")
+client.keys[IN_SPEED] = true
+for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(loopChannel ~= nil and loopChannel.playing, "ветер: спринт на 3+ запускает цикл")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 local foundFx = false
 for _, path in ipairs(materialPaths) do
-	if (path == "afterlight/disciplines/celerity/celerity_fx_a.png") then foundFx = true end
+	if (path == "afterlight/disciplines/celerity/celerity_vignette.png") then foundFx = true end
 end
-check(foundFx, "аура: оверлей берётся из afterlight/disciplines/celerity")
+check(foundFx, "аура: нуарная виньетка берётся из afterlight/disciplines/celerity")
+client.keys[IN_SPEED] = false
+for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(loopChannel.stopped, "ветер: отпустили shift — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 0, "аура: плавно гаснет за 1 секунду")
-check(loopChannel.stopped, "амбиент: остановлен после затухания")
 local drawsAfter = fxDraws
 fxHook()
 check(fxDraws == drawsAfter, "аура: после затухания не рисуется")

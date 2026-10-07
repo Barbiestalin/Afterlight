@@ -8,8 +8,10 @@ resource.AddFile("sound/" .. ix.celerity.SOUND_USE)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
 
--- Экранная аура скорости и своя текстура трейла «разорванного воздуха».
-resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_a.png")
+-- Нуарная виньетка экрана и трейл «разорванного воздуха» (png + vmt с
+-- параметрами трейла: вершинный цвет/альфа и аддитив).
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_vignette.png")
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.vmt")
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
@@ -43,10 +45,10 @@ function PLUGIN:ClearCelerity(client)
 	RemoveTrail(client)
 end
 
--- Шлейф «разорванного воздуха» (уровни 3+): собственная аддитивная текстура,
--- точка эмиссии — аттачмент головы (верх тела), поэтому шлейф тянется из-за
--- спины, а не из-под ног; на 4+ шире и плотнее.
-local TRAIL_MATERIAL = "afterlight/disciplines/celerity/celerity_trail.png"
+-- Шлейф «разорванного воздуха» (уровни 3+): собственная аддитивная текстура
+-- через vmt с вершинной альфой (иначе трейл не рисуется), эмиссия с аттачмента
+-- головы — из-за спины, а не из-под ног; на 4+ шире и плотнее.
+local TRAIL_MATERIAL = "afterlight/disciplines/celerity/celerity_trail"
 
 local function SpawnTrail(client, data)
 	RemoveTrail(client)
@@ -60,7 +62,7 @@ local function SpawnTrail(client, data)
 
 	-- util.SpriteTrail существует только в server realm; сущность
 	-- env_spritetrail реплицируется клиентам сама.
-	local trail = util.SpriteTrail(client, attach, Color(205, 228, 248, big and 120 or 80), true,
+	local trail = util.SpriteTrail(client, attach, Color(205, 228, 248, big and 160 or 110), true,
 		big and 30 or 18, big and 8 or 5, 0.9, 0.06, TRAIL_MATERIAL)
 	if (IsValid(trail)) then
 		client.afterlightCelerityTrail = trail
@@ -137,29 +139,42 @@ function PLUGIN:Think()
 		end
 
 		local weapon = client:GetActiveWeapon()
-		if (IsValid(weapon)) then
-			-- Темп ближнего боя: кулдауны милее сгорают быстрее. Анимации и
-			-- звуковые события оружия при этом не трогаем.
-			if (data and data.attack > 1 and IsMeleeWeapon(weapon)) then
-				ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.attack, dt, now)
-				ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.attack, dt, now)
-			end
+		if (!IsValid(weapon)) then continue end
 
-			-- Перезарядка огнестрела: завершение перезарядки оружие ждёт по
-			-- таймеру следующего выстрела — пока она идёт, сжимаем его, и
-			-- перезарядка заканчивается раньше. Флаг ставит StartCommand.
-			if (data and data.reload > 1 and weapon.afterlightReloading) then
-				ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.reload, dt, now)
-				ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.reload, dt, now)
+		-- Темп ближнего боя: кулдауны сгорают быстрее. Ровно во столько же
+		-- раз ускоряется и сама анимация (StartCommand), поэтому взмах
+		-- успевает доиграть до следующей атаки — звуковые события и эффекты
+		-- попаданий не теряются.
+		if (data and data.attack > 1 and IsMeleeWeapon(weapon)) then
+			ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.attack, dt, now)
+			ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.attack, dt, now)
+		end
+
+		-- Перезарядка огнестрела: движок завершает её по таймеру следующего
+		-- выстрела. Перезарядка начинается тапом R, поэтому в StartCommand
+		-- ставится флаг; здесь таймер один раз сжимается в reload раз —
+		-- пропорционально уровню дисциплины.
+		if (weapon.afterlightReloadPending) then
+			if (!data or data.reload <= 1) then
+				weapon.afterlightReloadPending = nil
+			else
+				local nextAt = weapon.GetNextPrimaryFire and weapon:GetNextPrimaryFire() or 0
+				if (nextAt > now + 0.05) then
+					local remaining = nextAt - now
+					weapon:SetNextPrimaryFire(now + remaining / data.reload)
+					local nextSec = weapon.GetNextSecondaryFire and weapon:GetNextSecondaryFire() or 0
+					if (nextSec > now) then
+						weapon:SetNextSecondaryFire(now + (nextSec - now) / data.reload)
+					end
+					weapon.afterlightReloadPending = nil
+					-- До конца исходной перезарядки новые не пересчитываем.
+					weapon.afterlightReloadBlock = now + remaining
+				end
 			end
 		end
 	end
 end
 
--- Отмечаем факт перезарядки (зажата клавиша и магазин не полон) — Think по
--- этому флагу сжимает таймер перезарядки. Анимации намеренно не ускоряем:
--- принудительный playback rate пропускал звуковые события ударов и ломал
--- движковую последовательность перезарядки.
 function PLUGIN:StartCommand(client, cmd)
 	local data = nil
 	local level = self:GetActiveLevel(client)
@@ -169,12 +184,28 @@ function PLUGIN:StartCommand(client, cmd)
 
 	local weapon = client:GetActiveWeapon()
 	if (!IsValid(weapon)) then return end
+	local now = CurTime()
 
-	local reloading = false
-	if (data and data.reload > 1 and weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0) then
-		reloading = cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()
+	-- Тап перезарядки (клавиша зажата, магазин не полон) — помечаем, что
+	-- таймер перезарядки нужно один раз сжать в Think.
+	if (data and data.reload > 1 and weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0
+		and cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()
+		and !weapon.afterlightReloadPending
+		and (!weapon.afterlightReloadBlock or weapon.afterlightReloadBlock < now)) then
+		weapon.afterlightReloadPending = true
 	end
-	weapon.afterlightReloading = reloading
+
+	-- Ускорение анимации — ТОЛЬКО ближнего боя и ровно в меру темпа атаки:
+	-- взмах проигрывается быстрее и успевает завершиться, события на месте.
+	-- Огнестрел не трогаем: чужой playback rate ломал движковую перезарядку.
+	local rate = 1
+	if (data and IsMeleeWeapon(weapon)) then
+		rate = data.attack
+	end
+	if (weapon.SetPlaybackRate and weapon.afterlightPlaybackRate != rate) then
+		weapon:SetPlaybackRate(rate)
+		weapon.afterlightPlaybackRate = rate
+	end
 end
 
 -- Уклонения (3+): первые data.dodge попаданий за время действия проходят
