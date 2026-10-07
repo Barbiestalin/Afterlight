@@ -107,6 +107,24 @@ local function ApplyWeaponMods(weapon, data)
 		weapon:SetPlaybackRate(rate)
 		weapon.afterlightPlaybackRate = rate
 	end
+
+	-- Аддоны (TFA/M9K и подобные) держат время перезарядки в собственных
+	-- полях — честно делим и их, восстанавливая после окончания.
+	for _, field in ipairs({"ReloadTime", "reloadtime", "reloadTime", "ReloadDelay", "reloadDelay", "LoadDelay"}) do
+		if (isnumber(weapon[field])) then
+			local origKey = "afterlightOrig_" .. field
+			if (!weapon[origKey]) then
+				weapon[origKey] = weapon[field]
+			end
+			local want = weapon[origKey]
+			if (data and data.reload > 1) then
+				want = want / data.reload
+			end
+			if (weapon[field] != want) then
+				weapon[field] = want
+			end
+		end
+	end
 end
 
 -- Кулдаун оружия тратится в mult раз быстрее реального времени — для оружия

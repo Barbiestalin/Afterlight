@@ -31,11 +31,11 @@ ix.celerity.SOUND_FALLBACKS = {
 -- (3+ — первые 3 ближних попадания, с 4 — любые, включая огнестрел, на 5 —
 -- первые 5), длительность и стоимость в витэ.
 ix.celerity.LEVELS = {
-	[1] = {walk = 1.25, run = 1.40, dexterity = 2, attack = 1.10, reload = 1.25, trail = 0, dodge = 0, dodgeBullets = false, duration = 10, vitae = 2},
-	[2] = {walk = 1.40, run = 1.65, dexterity = 2, attack = 1.20, reload = 1.40, trail = 0, dodge = 0, dodgeBullets = false, duration = 15, vitae = 4},
-	[3] = {walk = 1.60, run = 2.00, dexterity = 3, attack = 1.30, reload = 1.60, trail = 1, dodge = 3, dodgeBullets = false, duration = 15, vitae = 5},
-	[4] = {walk = 1.80, run = 2.40, dexterity = 3, attack = 1.40, reload = 1.80, trail = 2, dodge = 3, dodgeBullets = true, duration = 20, vitae = 8},
-	[5] = {walk = 2.10, run = 3.00, dexterity = 4, attack = 1.50, reload = 2.00, trail = 2, dodge = 5, dodgeBullets = true, duration = 20, vitae = 10}
+	[1] = {walk = 1.25, run = 1.40, dexterity = 2, attack = 1.05, reload = 1.25, trail = 0, dodge = 0, dodgeBullets = false, duration = 10, vitae = 2},
+	[2] = {walk = 1.40, run = 1.65, dexterity = 2, attack = 1.10, reload = 1.40, trail = 0, dodge = 0, dodgeBullets = false, duration = 15, vitae = 4},
+	[3] = {walk = 1.60, run = 2.00, dexterity = 3, attack = 1.15, reload = 1.60, trail = 1, dodge = 3, dodgeBullets = false, duration = 15, vitae = 5},
+	[4] = {walk = 1.80, run = 2.40, dexterity = 3, attack = 1.20, reload = 1.80, trail = 2, dodge = 3, dodgeBullets = true, duration = 20, vitae = 8},
+	[5] = {walk = 2.10, run = 3.00, dexterity = 4, attack = 1.25, reload = 2.00, trail = 2, dodge = 5, dodgeBullets = true, duration = 20, vitae = 10}
 }
 
 function ix.celerity.GetLevelData(level)

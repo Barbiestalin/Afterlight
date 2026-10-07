@@ -111,7 +111,9 @@ end)
 -- 3D-рендеру нужны штатные материалы (сырой png в частицах даёт error-
 -- «шахматку»), поэтому берём стоковые «пар/свечение» и красим в ледяной
 -- оттенок — выглядит как рваный воздух за спиной.
-local TRAIL_MATERIALS = {"effects/steam1", "particle/particle_glow_04"}
+-- trails/smoke и particle_smokegrenade — гарантированно существующие материалы
+-- (проверены боем на трейле Могущества), в ледяном тоне дают «рваный воздух».
+local TRAIL_MATERIALS = {"trails/smoke", "particle/particle_smokegrenade"}
 local trailEmitter = nil
 local lastTrailSpawn = 0
 
@@ -177,7 +179,9 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
 	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
 	-- Entity:KeyDown на клиенте не работает — читаем локальную клавиатуру.
-	local sprinting = input.IsKeyDown(KEY_LSHIFT) == true
+	-- Спринт определяем по факту быстрого движения (работает при любом бинде
+	-- Helix): скорость выше ходьбы * 1.15 — значит, бегут спринтом.
+	local sprinting = client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
 
 	local dt = FrameTime()
 	local now = RealTime()

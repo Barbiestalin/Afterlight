@@ -219,16 +219,16 @@ check(ownerNet == 1, "звук активации — персональный n
 PLUGIN:Think()
 check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Round(260 * 2),
 	"уровень 3: ходьба и спринт ускорены")
-check(client.playRate == 1.3, "внешняя анимация игрока ускорена в меру темпа атаки")
+check(client.playRate == 1.15, "внешняя анимация игрока ускорена в меру темпа атаки")
 
 -- Темп ближнего боя: кулдаун кулаков сгорает быстрее.
 local hands = make_weapon("ix_hands", true, -1, 0, 0.5)
 client.weapon = hands
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(math.abs(hands.Primary.Delay - 0.5 / 1.3) < 0.001,
+check(math.abs(hands.Primary.Delay - 0.5 / 1.15) < 0.001,
 	"милее: Primary.Delay честно уменьшен — удар раньше, анимация успевает доиграть")
-check(hands.rate == 1.3, "анимация ближнего боя ускорена тем же множителем")
+check(hands.rate == 1.15, "анимация ближнего боя ускорена тем же множителем")
 
 -- Анимации: милее размахивает быстрее; огнестрел крутит перезарядку быстрее
 -- (rate ставится постоянно, ДО начала перезарядки).
@@ -240,13 +240,15 @@ client.weapon = crowbar
 crowbar.nextP = currentTime + 1
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(crowbar.rate == 1.3, "анимация crowbar ускорена")
+check(crowbar.rate == 1.15, "анимация crowbar ускорена")
 check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее (C++ милее без Delay)")
 local pistol = make_weapon("weapon_pistol", false, 18, 5)
+pistol.ReloadTime = 2
 client.weapon = pistol
 currentTime = currentTime + 0.05
 PLUGIN:Think()
 check(pistol.rate == 1.6, "огнестрел: playback rate = множителю перезарядки, ставится до её начала")
+check(math.abs(pistol.ReloadTime - 2 / 1.6) < 0.001, "аддонское поле ReloadTime тоже поделено — перезарядка короче")
 PLUGIN:StartCommand(client, make_cmd(true))
 check(pistol.afterlightReloadWindow ~= nil, "тап перезарядки открывает окно ускорения")
 pistol.nextP = currentTime + 2 -- движок поставил таймер (DefaultReload)
@@ -400,12 +402,13 @@ for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; f
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
 check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
 client.nw2["afterlightCelerityLevel"] = 3
+client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel == nil, "ветер молчит: 3-й уровень без спринта")
 check(trailParticles == 0, "трейл без спринта не идёт")
-keysDown[KEY_LSHIFT] = true
+client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(loopChannel ~= nil and loopChannel.playing, "ветер: спринт на 3+ запускает цикл")
+check(loopChannel ~= nil and loopChannel.playing, "ветер: фактический спринт на 3+ запускает цикл")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
@@ -417,11 +420,11 @@ for _, path in ipairs(materialPaths) do
 end
 check(layA and layB, "оверлей: слои берутся из afterlight/disciplines/celerity")
 check(trailParticles > 0, "трейл: во время спринта за спиной идут частицы воздуха")
-keysDown[KEY_LSHIFT] = false
+client.vel = Vector(0, 0, 0)
 local partsAfter = trailParticles
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(trailParticles == partsAfter, "трейл: отпустили shift — шлейф прекратился")
-check(loopChannel.stopped, "ветер: отпустили shift — плавно затух и остановился")
+check(trailParticles == partsAfter, "трейл: спринт кончился — шлейф прекратился")
+check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 0, "аура: плавно гаснет за 1 секунду")
