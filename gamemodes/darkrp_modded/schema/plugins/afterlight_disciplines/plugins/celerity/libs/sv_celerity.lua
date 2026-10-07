@@ -8,8 +8,9 @@ resource.AddFile("sound/" .. ix.celerity.SOUND_USE)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
 
--- Текстура штрихов ветра для клиентского трейла (сам трейл рисует клиент).
-resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.png")
+-- Оверлеи экранной ауры (прозрачность запечена в png).
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_a.png")
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_b.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -52,8 +53,8 @@ function PLUGIN:ActivateCelerity(client, character, level)
 			self:ClearCelerity(client)
 		end
 	end)
-	-- Скорость и playback rate выставляются в Think ниже (туда же попадает
-	-- и respawn). Звук использования слышит ТОЛЬКО сам активировавший.
+	-- Модификаторы оружия применяются в Think (туда же попадает respawn и
+	-- смена оружия). Звук использования слышит ТОЛЬКО активировавший.
 	net.Start("AfterlightCelerityOwnerSound")
 		net.WriteString(ix.celerity.SOUND_USE)
 		net.WriteString(ix.celerity.SOUND_FALLBACKS.activate)
@@ -70,7 +71,46 @@ local function IsMeleeWeapon(weapon)
 	return weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() <= 0
 end
 
--- Кулдаун оружия тратится в mult раз быстрее реального времени.
+-- Модификаторы активного оружия:
+--  * у Lua-милее честно уменьшается Primary.Delay — следующий удар
+--    разрешается раньше, а анимация (включая внешнюю) успевает доиграть,
+--    потому что звук/события привязаны к самому факту атаки;
+--  * playback rate оружия: милее размахивает быстрее, огнестрел быстрее
+--    крутит анимацию перезарядки (rate ставится ДО начала перезарядки,
+--    поэтому движок сразу считает её укороченной);
+--  * без данных всё возвращается к исходному.
+local function ApplyWeaponMods(weapon, data)
+	local isMelee = IsMeleeWeapon(weapon)
+
+	if (weapon.Primary and isnumber(weapon.Primary.Delay)) then
+		if (!weapon.afterlightOrigDelay) then
+			weapon.afterlightOrigDelay = weapon.Primary.Delay
+		end
+		local want = weapon.afterlightOrigDelay
+		if (data and isMelee and data.attack > 1) then
+			want = want / data.attack
+		end
+		if (weapon.Primary.Delay != want) then
+			weapon.Primary.Delay = want
+		end
+	end
+
+	local rate = 1
+	if (data) then
+		if (isMelee) then
+			rate = data.attack
+		elseif (weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0) then
+			rate = data.reload
+		end
+	end
+	if (weapon.SetPlaybackRate and weapon.afterlightPlaybackRate != rate) then
+		weapon:SetPlaybackRate(rate)
+		weapon.afterlightPlaybackRate = rate
+	end
+end
+
+-- Кулдаун оружия тратится в mult раз быстрее реального времени — для оружия
+-- без Primary.Delay (C++ милее), чтобы темп всё равно рос.
 local function ShrinkWeaponTimer(weapon, getter, setter, mult, dt, now)
 	local nextAt = getter(weapon)
 	if (nextAt and nextAt > now) then
@@ -105,9 +145,8 @@ function PLUGIN:Think()
 			client:SetRunSpeed(wantRun)
 		end
 
-		-- Вся анимация игрока (взмахи снаружи, циклы бега) идёт быстрее —
-		-- и у владельца, и у окружающих, поэтому внешняя анимация и звуки
-		-- ударов не ломаются при ускоренном темпе атаки.
+		-- Вся анимация игрока снаружи идёт быстрее — внешне персонаж
+		-- двигается и бьёт как ускоренный, события не теряются.
 		local wantRate = data and data.attack or 1
 		if (client.afterlightRate != wantRate) then
 			client:SetPlaybackRate(wantRate)
@@ -117,17 +156,18 @@ function PLUGIN:Think()
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end
 
-		-- Темп ближнего боя: кулдауны сгорают быстрее; анимация владельца
-		-- (включая вьюмодель) ускорена тем же множителем.
-		if (data and data.attack > 1 and IsMeleeWeapon(weapon)) then
+		ApplyWeaponMods(weapon, data)
+
+		-- C++ милее без Primary.Delay: кулдауны сгорают быстрее.
+		if (data and data.attack > 1 and IsMeleeWeapon(weapon)
+			and !(weapon.Primary and isnumber(weapon.Primary.Delay))) then
 			ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.attack, dt, now)
 			ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.attack, dt, now)
 		end
 
-		-- Перезарядка огнестрела: тап R открывает «окно» перезарядки; пока
-		-- оно открыто и таймер следующего выстрела похож на перезарядку
-		-- (>0.4с), он непрерывно сжимается в reload раз — пропорционально
-		-- уровню. Завершение перезарядки движок ждёт по этому таймеру.
+		-- Перезарядка огнестрела: тап R открывает окно, в котором таймер
+		-- следующего выстрела (похожий на перезарядку, >0.4с) непрерывно
+		-- сжимается в reload раз — пропорционально уровню.
 		if (data and data.reload > 1 and weapon.afterlightReloadWindow
 			and weapon.afterlightReloadWindow > now) then
 			local clipFull = weapon.GetMaxClip1 ~= nil and weapon:Clip1() >= weapon:GetMaxClip1()
@@ -157,17 +197,6 @@ function PLUGIN:StartCommand(client, cmd)
 	if (data and data.reload > 1 and weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0
 		and cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()) then
 		weapon.afterlightReloadWindow = CurTime() + 6
-	end
-
-	-- Вьюмодель ближнего боя размахивает быстрее для владельца; внешняя
-	-- анимация ускорена через playback rate самого игрока (Think).
-	local rate = 1
-	if (data and IsMeleeWeapon(weapon)) then
-		rate = data.attack
-	end
-	if (weapon.SetPlaybackRate and weapon.afterlightPlaybackRate != rate) then
-		weapon:SetPlaybackRate(rate)
-		weapon.afterlightPlaybackRate = rate
 	end
 end
 

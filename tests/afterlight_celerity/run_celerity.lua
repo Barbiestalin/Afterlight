@@ -37,6 +37,7 @@ math.Rand = function(a, b) return a + 0.5 * (b - a) end
 function isfunction(value) return type(value) == "function" end
 function istable(value) return type(value) == "table" end
 function isstring(value) return type(value) == "string" end
+function isnumber(value) return type(value) == "number" end
 function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
 
 bit = {band = function(a, b) return a & b end}
@@ -175,8 +176,9 @@ local function make_entity(class, isPlayer)
 	return entity
 end
 
-local function make_weapon(class, melee, maxclip, clip)
+local function make_weapon(class, melee, maxclip, clip, delay)
 	local weapon = {class = class, nextP = 0, nextS = 0, rate = 1, IsMelee = melee, clip = clip or 0, maxclip = maxclip or -1}
+	weapon.Primary = delay and {Delay = delay} or nil
 	weapon.GetClass = function(self) return self.class end
 	weapon.GetNextPrimaryFire = function(self) return self.nextP end
 	weapon.SetNextPrimaryFire = function(self, v) self.nextP = v end
@@ -201,11 +203,12 @@ check(math.abs(client:GetNW2Float("afterlightCelerityEnd", 0) - (currentTime + 1
 check(PLUGIN:GetActiveLevel(client) == 3, "GetActiveLevel = 3")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "dexterity") == 3, "бонус Ловкости +3 в чарлисте")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "strength") == nil, "бонус только к Ловкости")
-local hasTrailMat = false
+local hasFx = 0
 for _, added in ipairs(addedFiles) do
-	if (added == "materials/afterlight/disciplines/celerity/celerity_trail.png") then hasTrailMat = true end
+	if (added == "materials/afterlight/disciplines/celerity/celerity_fx_a.png"
+		or added == "materials/afterlight/disciplines/celerity/celerity_fx_b.png") then hasFx = hasFx + 1 end
 end
-check(hasTrailMat, "текстура трейла раздаётся клиентам")
+check(hasFx == 2, "оверлеи экранной ауры раздаются клиентам")
 local ownerNet = 0
 for _, entry in ipairs(netLog) do
 	if (entry.name == "AfterlightCelerityOwnerSound" and entry.target == client) then ownerNet = ownerNet + 1 end
@@ -219,33 +222,31 @@ check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Roun
 check(client.playRate == 1.3, "внешняя анимация игрока ускорена в меру темпа атаки")
 
 -- Темп ближнего боя: кулдаун кулаков сгорает быстрее.
-local hands = make_weapon("ix_hands", true)
+local hands = make_weapon("ix_hands", true, -1, 0, 0.5)
 client.weapon = hands
-hands.nextP = currentTime + 1
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(hands.nextP < currentTime + 0.96, "темп ближнего боя: кулдаун тает быстрее реального времени")
+check(math.abs(hands.Primary.Delay - 0.5 / 1.3) < 0.001,
+	"милее: Primary.Delay честно уменьшен — удар раньше, анимация успевает доиграть")
+check(hands.rate == 1.3, "анимация ближнего боя ускорена тем же множителем")
 
--- Анимации: милее размахивает быстрее, огнестрел — только в перезарядке.
+-- Анимации: милее размахивает быстрее; огнестрел крутит перезарядку быстрее
+-- (rate ставится постоянно, ДО начала перезарядки).
 local function make_cmd(reload)
 	return {keys = {[IN_RELOAD] = reload}, KeyDown = function(self, key) return self.keys[key] == true end}
 end
-PLUGIN:StartCommand(client, make_cmd(false))
-check(hands.rate == 1.3, "анимация ближнего боя ускорена ровно в меру темпа — взмах успевает доиграть")
 local crowbar = make_weapon("weapon_crowbar", false, -1)
 client.weapon = crowbar
 crowbar.nextP = currentTime + 1
-PLUGIN:StartCommand(client, make_cmd(false))
-check(crowbar.rate == 1.3, "анимация crowbar ускорена в меру темпа — события взмаха на месте")
 currentTime = currentTime + 0.05
 PLUGIN:Think()
-check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее")
+check(crowbar.rate == 1.3, "анимация crowbar ускорена")
+check(crowbar.nextP < currentTime + 0.96, "кулдаун crowbar тает быстрее (C++ милее без Delay)")
 local pistol = make_weapon("weapon_pistol", false, 18, 5)
 client.weapon = pistol
-PLUGIN:StartCommand(client, make_cmd(false))
-check(pistol.rate == 1, "огнестрел вне перезарядки в обычном темпе")
-PLUGIN:StartCommand(client, make_cmd(true))
-check(pistol.rate == 1, "перезарядка ускорена таймером, анимация не ломается")
+currentTime = currentTime + 0.05
+PLUGIN:Think()
+check(pistol.rate == 1.6, "огнестрел: playback rate = множителю перезарядки, ставится до её начала")
 PLUGIN:StartCommand(client, make_cmd(true))
 check(pistol.afterlightReloadWindow ~= nil, "тап перезарядки открывает окно ускорения")
 pistol.nextP = currentTime + 2 -- движок поставил таймер (DefaultReload)
@@ -297,9 +298,11 @@ PLUGIN:ActivateCelerity(client, character, 1)
 currentTime = currentTime + 11
 stepTimers()
 check(client:GetNW2Int("afterlightCelerityLevel", 0) == 0, "после 10с уровень сброшен")
+client.weapon = hands
 PLUGIN:Think()
 check(client.walkSpeed == 130 and client.runSpeed == 260, "скорость возвращена к базовой")
 check(client.playRate == 1, "внешняя анимация возвращена к обычной скорости")
+check(hands.Primary.Delay == 0.5 and hands.rate == 1, "после окончания: темп и анимация милее восстановлены")
 
 -- ===== Регистрация способностей в колесе интерфейса =====
 local registered = {}
@@ -406,6 +409,13 @@ check(loopChannel ~= nil and loopChannel.playing, "ветер: спринт на
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
+check(fxDraws > 0, "оверлей: два слоя штрихов рисуются поверх виньетки")
+local layA, layB = false, false
+for _, path in ipairs(materialPaths) do
+	if (path == "afterlight/disciplines/celerity/celerity_fx_a.png") then layA = true end
+	if (path == "afterlight/disciplines/celerity/celerity_fx_b.png") then layB = true end
+end
+check(layA and layB, "оверлей: слои берутся из afterlight/disciplines/celerity")
 check(trailParticles > 0, "трейл: во время спринта за спиной идут частицы воздуха")
 keysDown[KEY_LSHIFT] = false
 local partsAfter = trailParticles
