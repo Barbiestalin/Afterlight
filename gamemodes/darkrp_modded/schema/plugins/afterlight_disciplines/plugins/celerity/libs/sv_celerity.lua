@@ -8,10 +8,7 @@ resource.AddFile("sound/" .. ix.celerity.SOUND_USE)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP)
 resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
 
--- Нуарная виньетка экрана и трейл «разорванного воздуха» (png + vmt с
--- параметрами трейла: вершинный цвет/альфа и аддитив).
-resource.AddFile("materials/afterlight/disciplines/celerity/celerity_vignette.png")
-resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.vmt")
+-- Текстура штрихов ветра для клиентского трейла (сам трейл рисует клиент).
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_trail.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
@@ -29,43 +26,15 @@ local function TimerName(client)
 	return "AfterlightCelerity." .. (client:SteamID64() or client:EntIndex())
 end
 
-local function RemoveTrail(client)
-	local trail = client.afterlightCelerityTrail
-	if (IsValid(trail)) then
-		trail:Remove()
-	end
-	client.afterlightCelerityTrail = nil
-end
-
 function PLUGIN:ClearCelerity(client)
 	timer.Remove(TimerName(client))
 	client:SetNW2Int("afterlightCelerityLevel", 0)
 	client:SetNW2Float("afterlightCelerityEnd", 0)
 	client:SetNW2Int("afterlightCelerityDodges", 0)
-	RemoveTrail(client)
-end
-
--- Шлейф «разорванного воздуха» (уровни 3+): собственная аддитивная текстура
--- через vmt с вершинной альфой (иначе трейл не рисуется), эмиссия с аттачмента
--- головы — из-за спины, а не из-под ног; на 4+ шире и плотнее.
-local TRAIL_MATERIAL = "afterlight/disciplines/celerity/celerity_trail"
-
-local function SpawnTrail(client, data)
-	RemoveTrail(client)
-	if ((data.trail or 0) <= 0) then return end
-	local big = data.trail >= 2
-
-	local attach = client.LookupAttachment and client:LookupAttachment("anim_attachment_head") or 0
-	if (!attach or attach <= 0) then
-		attach = 0
-	end
-
-	-- util.SpriteTrail существует только в server realm; сущность
-	-- env_spritetrail реплицируется клиентам сама.
-	local trail = util.SpriteTrail(client, attach, Color(205, 228, 248, big and 160 or 110), true,
-		big and 30 or 18, big and 8 or 5, 0.9, 0.06, TRAIL_MATERIAL)
-	if (IsValid(trail)) then
-		client.afterlightCelerityTrail = trail
+	-- Внешняя анимация возвращается к обычной скорости.
+	if (client.afterlightRate ~= 1) then
+		client:SetPlaybackRate(1)
+		client.afterlightRate = 1
 	end
 end
 
@@ -83,10 +52,8 @@ function PLUGIN:ActivateCelerity(client, character, level)
 			self:ClearCelerity(client)
 		end
 	end)
-	SpawnTrail(client, data)
-	-- Скорость выставляется в Think ниже (туда же попадает и respawn).
-	-- Звук использования слышит ТОЛЬКО сам активировавший: сервер шлёт
-	-- персональный net, клиент играет его локально.
+	-- Скорость и playback rate выставляются в Think ниже (туда же попадает
+	-- и respawn). Звук использования слышит ТОЛЬКО сам активировавший.
 	net.Start("AfterlightCelerityOwnerSound")
 		net.WriteString(ix.celerity.SOUND_USE)
 		net.WriteString(ix.celerity.SOUND_FALLBACKS.activate)
@@ -138,38 +105,38 @@ function PLUGIN:Think()
 			client:SetRunSpeed(wantRun)
 		end
 
+		-- Вся анимация игрока (взмахи снаружи, циклы бега) идёт быстрее —
+		-- и у владельца, и у окружающих, поэтому внешняя анимация и звуки
+		-- ударов не ломаются при ускоренном темпе атаки.
+		local wantRate = data and data.attack or 1
+		if (client.afterlightRate != wantRate) then
+			client:SetPlaybackRate(wantRate)
+			client.afterlightRate = wantRate
+		end
+
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end
 
-		-- Темп ближнего боя: кулдауны сгорают быстрее. Ровно во столько же
-		-- раз ускоряется и сама анимация (StartCommand), поэтому взмах
-		-- успевает доиграть до следующей атаки — звуковые события и эффекты
-		-- попаданий не теряются.
+		-- Темп ближнего боя: кулдауны сгорают быстрее; анимация владельца
+		-- (включая вьюмодель) ускорена тем же множителем.
 		if (data and data.attack > 1 and IsMeleeWeapon(weapon)) then
 			ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.attack, dt, now)
 			ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.attack, dt, now)
 		end
 
-		-- Перезарядка огнестрела: движок завершает её по таймеру следующего
-		-- выстрела. Перезарядка начинается тапом R, поэтому в StartCommand
-		-- ставится флаг; здесь таймер один раз сжимается в reload раз —
-		-- пропорционально уровню дисциплины.
-		if (weapon.afterlightReloadPending) then
-			if (!data or data.reload <= 1) then
-				weapon.afterlightReloadPending = nil
-			else
-				local nextAt = weapon.GetNextPrimaryFire and weapon:GetNextPrimaryFire() or 0
-				if (nextAt > now + 0.05) then
-					local remaining = nextAt - now
-					weapon:SetNextPrimaryFire(now + remaining / data.reload)
-					local nextSec = weapon.GetNextSecondaryFire and weapon:GetNextSecondaryFire() or 0
-					if (nextSec > now) then
-						weapon:SetNextSecondaryFire(now + (nextSec - now) / data.reload)
-					end
-					weapon.afterlightReloadPending = nil
-					-- До конца исходной перезарядки новые не пересчитываем.
-					weapon.afterlightReloadBlock = now + remaining
-				end
+		-- Перезарядка огнестрела: тап R открывает «окно» перезарядки; пока
+		-- оно открыто и таймер следующего выстрела похож на перезарядку
+		-- (>0.4с), он непрерывно сжимается в reload раз — пропорционально
+		-- уровню. Завершение перезарядки движок ждёт по этому таймеру.
+		if (data and data.reload > 1 and weapon.afterlightReloadWindow
+			and weapon.afterlightReloadWindow > now) then
+			local clipFull = weapon.GetMaxClip1 ~= nil and weapon:Clip1() >= weapon:GetMaxClip1()
+			local nextAt = weapon.GetNextPrimaryFire and weapon:GetNextPrimaryFire() or 0
+			if (clipFull or nextAt <= now) then
+				weapon.afterlightReloadWindow = nil
+			elseif (nextAt - now > 0.4) then
+				ShrinkWeaponTimer(weapon, weapon.GetNextPrimaryFire, weapon.SetNextPrimaryFire, data.reload, dt, now)
+				ShrinkWeaponTimer(weapon, weapon.GetNextSecondaryFire, weapon.SetNextSecondaryFire, data.reload, dt, now)
 			end
 		end
 	end
@@ -184,20 +151,16 @@ function PLUGIN:StartCommand(client, cmd)
 
 	local weapon = client:GetActiveWeapon()
 	if (!IsValid(weapon)) then return end
-	local now = CurTime()
 
-	-- Тап перезарядки (клавиша зажата, магазин не полон) — помечаем, что
-	-- таймер перезарядки нужно один раз сжать в Think.
+	-- Тап перезарядки (клавиша нажата, магазин не полон) открывает окно,
+	-- в котором Think сжимает таймер перезарядки.
 	if (data and data.reload > 1 and weapon.GetMaxClip1 ~= nil and weapon:GetMaxClip1() > 0
-		and cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()
-		and !weapon.afterlightReloadPending
-		and (!weapon.afterlightReloadBlock or weapon.afterlightReloadBlock < now)) then
-		weapon.afterlightReloadPending = true
+		and cmd:KeyDown(IN_RELOAD) == true and weapon:Clip1() < weapon:GetMaxClip1()) then
+		weapon.afterlightReloadWindow = CurTime() + 6
 	end
 
-	-- Ускорение анимации — ТОЛЬКО ближнего боя и ровно в меру темпа атаки:
-	-- взмах проигрывается быстрее и успевает завершиться, события на месте.
-	-- Огнестрел не трогаем: чужой playback rate ломал движковую перезарядку.
+	-- Вьюмодель ближнего боя размахивает быстрее для владельца; внешняя
+	-- анимация ускорена через playback rate самого игрока (Think).
 	local rate = 1
 	if (data and IsMeleeWeapon(weapon)) then
 		rate = data.attack
