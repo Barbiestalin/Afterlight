@@ -248,7 +248,7 @@ check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 local trailNow = client.afterlightCelerityTrail
 check(trailNow ~= nil and trailNow.bright.material == "trails/tube.vmt" and trailNow.bright.removed == false,
 	"трейл: 3-й уровень рождает ленты «трубы» trails/tube.vmt")
-check(trailNow ~= nil and trailNow.bright.life <= 0.2, "трейл: ленты короткие — тают за ~0.2с")
+check(trailNow ~= nil and trailNow.bright.life <= 0.12, "трейл: ленты короткие — короче шлейфа из моделек")
 check(trailNow ~= nil and trailNow.anchor.parent == client and trailNow.anchor.bone == 4,
 	"трейл: якорь на кости позвоночника — шлейф из спины, не из ног")
 client.vel = Vector(300, 0, 0)
@@ -422,7 +422,10 @@ ClientsideModel = function(model)
 	m.SetCycle = function() end
 	m.SetPos = function() end
 	m.SetAngles = function() end
-	m.SetColor = function(self, r, g, b, a) self.alpha = a end
+	m.SetColor = function(self, r, g, b, a)
+		if (type(r) == "table") then self.alpha = r.a else self.alpha = a end
+	end
+	m.SetPlaybackRate = function(self, v) self.playbackRate = v end
 	m.Remove = function(self) self.removed = true end
 	return m
 end
@@ -482,6 +485,7 @@ for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; f
 check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
 check(#ix.celerity.fx.ghosts.list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
 check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
+check(ix.celerity.fx.ghosts.list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
@@ -494,7 +498,10 @@ end
 check(layA and layB, "оверлей: слои берутся из afterlight/disciplines/celerity")
 client.nw2["afterlightCeleritySprint"] = false
 client.vel = Vector(0, 0, 0)
-for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+for _ = 1, 7 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(#ix.celerity.fx.ghosts.list > 0 and ix.celerity.fx.ghosts.list[1].cm.alpha ~= nil and ix.celerity.fx.ghosts.list[1].cm.alpha < 90,
+	"размытие: отпустили shift — копии продолжают плавно таять по очереди, а не исчезают сразу")
+for _ = 1, 18 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразы полностью растаяли")
 check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0

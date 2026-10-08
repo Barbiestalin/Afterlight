@@ -203,9 +203,9 @@ local function UpdateSpeedTrail(client, level, data)
 
 	local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
 	local bright = util.SpriteTrail(anchor, 0, Color(175, 210, 240, 90), true,
-		0.2, 4 * scale, 1, 0.125, "trails/tube.vmt")
+		0.12, 4 * scale, 1, 0.125, "trails/tube.vmt")
 	local haze = util.SpriteTrail(anchor, 0, Color(140, 180, 220, 40), true,
-		0.16, 9 * scale, 2, 0.125, "trails/tube.vmt")
+		0.1, 9 * scale, 2, 0.125, "trails/tube.vmt")
 	client.afterlightCelerityTrail = {anchor = anchor, bright = bright, haze = haze, level = level}
 end
 

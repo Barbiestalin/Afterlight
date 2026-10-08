@@ -146,6 +146,10 @@ local function UpdateGhosts(client, fx, active, level, sprinting, now)
 				cm:SetMaterial(GHOST_MATERIAL)
 				cm:SetSequence(client:GetSequence())
 				cm:SetCycle(client:GetCycle())
+				-- Замораживаем анимацию слепка: иначе копия доигрывает бег и
+				-- «наклоняется/переворачивается» — слепок должен держать позу
+				-- момента съёма.
+				cm:SetPlaybackRate(0)
 				cm:SetPos(client:GetPos())
 				cm:SetAngles(client:GetAngles())
 				ghosts.list[#ghosts.list + 1] = {cm = cm, born = now}
@@ -162,14 +166,17 @@ local function UpdateGhosts(client, fx, active, level, sprinting, now)
 	for i = #ghosts.list, 1, -1 do
 		local entry = ghosts.list[i]
 		local age = now - entry.born
-		if (age > 0.3 or !IsValid(entry.cm)) then
+		if (age > 0.55 or !IsValid(entry.cm)) then
 			if (IsValid(entry.cm)) then
 				entry.cm:Remove()
 			end
 			table.remove(ghosts.list, i)
 		else
-			local k = 1 - age / 0.3
-			entry.cm:SetColor(185, 215, 240, math.Clamp(80 * k, 0, 255))
+			-- Entity:SetColor в GMod принимает Color-таблицу (расширение
+			-- entity.lua), четыре числа ломают хук. Плавное поочерёдное
+			-- затухание каждой копии за 0.55с.
+			local k = 1 - age / 0.55
+			entry.cm:SetColor(Color(185, 215, 240, math.Clamp(90 * k, 0, 255)))
 		end
 	end
 end
