@@ -110,9 +110,69 @@ end)
 
 -- === Трейл ===
 -- Шлейф за персонажем — серверные ЛЕНТЫ util.SpriteTrail на штатной текстуре
--- «трубы» (trails/tube.vmt, см. sv_celerity.lua): гладкий шлейф вдоль движения,
--- как стоковый трейл GMod. Клиент здесь ничего не рисует — ни частиц, ни
--- квадратов, ни магенты.
+-- «трубы» (trails/tube.vmt, см. sv_celerity.lua): короткий ванильный шлейф
+-- вдоль движения, исходит из спины (якорь на кости позвоночника), тает сам.
+
+-- === Размытие аномального движения: полупрозрачные послеобразы ===
+-- Пока поднят серверный флаг спринта, каждые 0.09с снимается слепок персонажа:
+-- clientside-копия модели с полупрозрачным матовым стеклом остаётся в точке
+-- съёма и тает за 0.3с. Несколько тающих копий подряд = силуэт буквально
+-- «размывается» из общего вида, как при аномальной скорости. Если материала
+-- нет на клиенте — послеобразы молча отключаются, трейл продолжает работать.
+local GHOST_MATERIAL = "models/props_c17/frostedglass_01a"
+local ghostOk = nil
+local ghostNextTry = 0
+
+local function GhostsAvailable(now)
+	if (ghostOk ~= nil or now < ghostNextTry) then
+		return ghostOk == true
+	end
+	ghostOk = file.Exists("materials/" .. GHOST_MATERIAL .. ".vmt", "GAME") == true
+		and !Material(GHOST_MATERIAL):IsError()
+	ghostNextTry = now + 5
+	return ghostOk
+end
+
+local function UpdateGhosts(client, fx, active, level, sprinting, now)
+	local ghosts = fx.ghosts
+	local moving = client:GetVelocity():Length2D() > 150
+
+	if (active and level >= 3 and sprinting and moving and GhostsAvailable(now)) then
+		if (now >= ghosts.next) then
+			ghosts.next = now + 0.09
+			local cm = ClientsideModel(client:GetModel())
+			if (IsValid(cm)) then
+				cm:SetSkin(client:GetSkin())
+				cm:SetMaterial(GHOST_MATERIAL)
+				cm:SetSequence(client:GetSequence())
+				cm:SetCycle(client:GetCycle())
+				cm:SetPos(client:GetPos())
+				cm:SetAngles(client:GetAngles())
+				ghosts.list[#ghosts.list + 1] = {cm = cm, born = now}
+				if (#ghosts.list > 6) then
+					local old = table.remove(ghosts.list, 1)
+					if (IsValid(old.cm)) then
+						old.cm:Remove()
+					end
+				end
+			end
+		end
+	end
+
+	for i = #ghosts.list, 1, -1 do
+		local entry = ghosts.list[i]
+		local age = now - entry.born
+		if (age > 0.3 or !IsValid(entry.cm)) then
+			if (IsValid(entry.cm)) then
+				entry.cm:Remove()
+			end
+			table.remove(ghosts.list, i)
+		else
+			local k = 1 - age / 0.3
+			entry.cm:SetColor(185, 215, 240, math.Clamp(80 * k, 0, 255))
+		end
+	end
+end
 
 -- === Нуарная экранная аура ===
 local LAYER_PATHS = {
@@ -141,6 +201,7 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	local client = LocalPlayer()
 	if (!IsValid(client)) then return end
 	local fx = ix.celerity.fx
+	fx.ghosts = fx.ghosts or {list = {}, next = 0}
 
 	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
 	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
@@ -154,6 +215,8 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 
 	-- Ветер — только когда серверный флаг спринта поднят на 3+ уровне.
 	UpdateAmbience(active and level >= 3 and sprinting, now, dt)
+	-- Послеобразы-размытие — по тому же серверному флагу спринта.
+	UpdateGhosts(client, fx, active, level, sprinting, now)
 
 	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
 	local target = active and 1 or 0

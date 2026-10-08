@@ -47,6 +47,7 @@ DMG_CLUB = 128
 DMG_BULLET = 2
 DMG_BUCKSHOT = 16
 IN_RELOAD = 13
+EF_NODRAW = 32
 IN_SPEED = 2
 vector_origin = {x = 0, y = 0, z = 0}
 
@@ -100,6 +101,7 @@ ents = {Create = function(class)
 	ent.Remove = function(self) self.removed = true end
 	ent.SetModel = function() end
 	ent.SetNoDraw = function() end
+	ent.AddEffects = function() end
 	ent.SetParent = function(self, parent, bone) self.parent = parent; self.bone = bone end
 	ent.SetLocalPos = function() end
 	ent.Spawn = function() end
@@ -174,6 +176,12 @@ local function make_entity(class, isPlayer)
 	entity.KeyDown = function(self, key) return self.keys ~= nil and self.keys[key] == true end
 	entity.SetPlaybackRate = function(self, v) self.playRate = v end
 	entity.GetBonePosition = function() return Vector(0, 0, 60) end
+	entity.LookupBone = function() return 4 end
+	entity.GetModel = function() return "models/player/group01/male_01.mdl" end
+	entity.GetSkin = function() return 0 end
+	entity.GetSequence = function() return 1 end
+	entity.GetCycle = function() return 0.3 end
+	entity.GetAngles = function() return Vector(0, 0, 0) end
 	entity.GetVelocity = function(self) return self.vel or Vector(0, 0, 0) end
 	entity.GetPos = function(self) return self.pos or Vector(0, 0, 0) end
 	return entity
@@ -225,39 +233,48 @@ check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Roun
 check(client.playRate == 1.15, "внешняя анимация игрока ускорена в меру темпа атаки")
 
 -- Флаг спринта считает сервер по авторитетной скорости; клиент лишь читает.
--- Ветер и рябь живут строго по нему: активация без спринта — тишина.
+-- Ветер и размытие живут строго по нему: активация без спринта — тишина.
 client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == true,
 	"сервер: флаг спринта поднят при быстром движении")
-local speedTrails = client.afterlightCelerityTrails
-check(speedTrails ~= nil and #speedTrails == 2 and speedTrails[1].material == "trails/tube.vmt" and speedTrails[1].removed == false,
-	"трейл: спринт рождает ленты «трубы» на штатной trails/tube.vmt")
 client.vel = Vector(200, 0, 0)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: ускоренная ходьба — не спринт, активация Стремительности сама по себе тихая")
+
+-- Трейл: короткая «труба» из спины; сущности живут всю дисциплину и тают
+-- сами — без «удалился и заново».
+local trailNow = client.afterlightCelerityTrail
+check(trailNow ~= nil and trailNow.bright.material == "trails/tube.vmt" and trailNow.bright.removed == false,
+	"трейл: 3-й уровень рождает ленты «трубы» trails/tube.vmt")
+check(trailNow ~= nil and trailNow.bright.life <= 0.2, "трейл: ленты короткие — тают за ~0.2с")
+check(trailNow ~= nil and trailNow.anchor.parent == client and trailNow.anchor.bone == 4,
+	"трейл: якорь на кости позвоночника — шлейф из спины, не из ног")
+client.vel = Vector(300, 0, 0)
+PLUGIN:Think()
+check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
+	"трейл: спринт не пересоздаёт ленты — никакого «удалился и заново»")
 client.vel = Vector(0, 0, 0)
 PLUGIN:Think()
-check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
-	"сервер: без спринта флаг опущен")
-check(speedTrails[1].removed == true and client.afterlightCelerityTrails == nil,
-	"трейл: спринт кончился — ленты сняты в том же кадре")
+check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
+	"трейл: остановка спринта не убирает ленты — тают сами, как в ванили")
 PLUGIN:ActivateCelerity(client, character, 2)
-client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: до 3-го уровня флаг не поднимается")
-check(client.afterlightCelerityTrails == nil, "трейл: до 3-го уровня шлейфа нет")
+check(client.afterlightCelerityTrail == nil and trailNow.bright.removed == true and trailNow.anchor.removed == true,
+	"трейл: ниже 3-го уровня трейл снимается")
+client.vel = Vector(300, 0, 0)
 PLUGIN:ActivateCelerity(client, character, 3)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == true,
 	"сервер: на 3-м уровне флаг возвращается со спринтом")
-check(client.afterlightCelerityTrails ~= nil, "трейл: на 3-м уровне в спринте возвращается")
+check(client.afterlightCelerityTrail ~= nil, "трейл: на 3-м уровне трейл возвращается")
 PLUGIN:ClearCelerity(client)
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: окончание дисциплины сбрасывает флаг")
-check(client.afterlightCelerityTrails == nil, "трейл: окончание дисциплины снимает ленты")
+check(client.afterlightCelerityTrail == nil, "трейл: окончание дисциплины снимает ленты")
 PLUGIN:ActivateCelerity(client, character, 3)
 client.vel = nil
 
@@ -397,6 +414,18 @@ ParticleEmitter = function()
 		end
 	}
 end
+ClientsideModel = function(model)
+	local m = {model = model, removed = false}
+	m.SetMaterial = function(self, v) self.material = v end
+	m.SetSkin = function() end
+	m.SetSequence = function() end
+	m.SetCycle = function() end
+	m.SetPos = function() end
+	m.SetAngles = function() end
+	m.SetColor = function(self, r, g, b, a) self.alpha = a end
+	m.Remove = function(self) self.removed = true end
+	return m
+end
 input = {IsKeyDown = function(key) return keysDown[key] == true end}
 KEY_LSHIFT = 100
 keysDown = {}
@@ -442,6 +471,7 @@ client.nw2["afterlightCeleritySprint"] = false
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
 check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
+check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразов нет")
 client.nw2["afterlightCelerityLevel"] = 3
 client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
@@ -450,6 +480,8 @@ client.nw2["afterlightCeleritySprint"] = true
 client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
+check(#ix.celerity.fx.ghosts.list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
+check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
@@ -463,6 +495,7 @@ check(layA and layB, "оверлей: слои берутся из afterlight/di
 client.nw2["afterlightCeleritySprint"] = false
 client.vel = Vector(0, 0, 0)
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразы полностью растаяли")
 check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
