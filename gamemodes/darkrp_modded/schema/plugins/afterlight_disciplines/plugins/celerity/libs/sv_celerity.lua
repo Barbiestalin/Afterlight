@@ -41,7 +41,7 @@ function PLUGIN:ClearCelerity(client)
 	-- переживают окончание дисциплины.
 	local trail = client.afterlightCelerityTrail
 	if (trail) then
-		for _, ent in ipairs({trail.anchor, trail.bright, trail.haze}) do
+		for _, ent in ipairs({trail.bright, trail.haze}) do
 			if (IsValid(ent)) then
 				ent:Remove()
 			end
@@ -158,19 +158,21 @@ local function IsSprinting(client, level, data)
 		and client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
 end
 
--- Трейл — штатная «труба» (trails/tube.vmt), КОРОТКАЯ и ванильная по поведению:
--- ленты рождаются только когда якорь движется и ТАЮТ САМИ (~0.2с), поэтому
--- шлейф плавно идёт за персонажем и затухает. Сущности трейла живут всё время
--- дисциплины и НЕ пересоздаются при спринте — никакого «удалился и заново».
--- Якорь — невидимая сущность на кости позвоночника: шлейф исходит из спины,
--- а не из ног. Схема вызова SpriteTrail — как у штатных трейлов (attach 0).
+-- Трейл цепляется К САМОМУ ИГРОКУ (аттачмент корпуса), а не к стороннему
+-- якорю: рендер берёт аттачмент из того же скелета, что и модель, — ленты
+-- выходят вплотную к телу, без метрового зазора (сторонняя сущность
+-- рассинхронизируется с игроком на клиенте). Показ/скрытие — EF_NODRAW по
+-- серверному флагу спринта: нажали shift — трейл появился, отжали — пропал,
+-- как и задумано; сущности при этом не пересоздаются.
+local TRAIL_ATTACHMENTS = {"anim_attachment_chest", "chest", "anim_attachment_head", "head", "eyes"}
+
 local function UpdateSpeedTrail(client, level, data, sprinting)
 	local want = data ~= nil and level >= 3 and (data.trail or 0) > 0
 	local current = client.afterlightCelerityTrail
 
 	if (!want) then
 		if (current) then
-			for _, ent in ipairs({current.anchor, current.bright, current.haze}) do
+			for _, ent in ipairs({current.bright, current.haze}) do
 				if (IsValid(ent)) then
 					ent:Remove()
 				end
@@ -180,56 +182,44 @@ local function UpdateSpeedTrail(client, level, data, sprinting)
 		return
 	end
 
-	if (current and IsValid(current.anchor) and current.level == level) then
-		-- Ленты рождаются ТОЛЬКО в спринт: без флага якорь заморожен в мире
-		-- (отцеплен), доедающие ленты дотухают; с флагом якорь снова на спине.
-		-- Сущности при этом не пересоздаются — никакого «удалился и заново».
-		if (sprinting and current.frozen) then
-			current.frozen = false
-			if (current.bone and current.bone > 0) then
-				current.anchor:SetParent(client, current.bone)
-			else
-				current.anchor:SetParent(client)
-			end
-		elseif (!sprinting and !current.frozen) then
-			current.frozen = true
-			current.anchor:SetParent(nil)
-		end
-		return
-	end
-	if (current) then
-		for _, ent in ipairs({current.anchor, current.bright, current.haze}) do
-			if (IsValid(ent)) then
-				ent:Remove()
+	if (!current or !IsValid(current.bright) or current.level ~= level) then
+		if (current) then
+			for _, ent in ipairs({current.bright, current.haze}) do
+				if (IsValid(ent)) then
+					ent:Remove()
+				end
 			end
 		end
+
+		local attach = 0
+		for _, name in ipairs(TRAIL_ATTACHMENTS) do
+			local a = client.LookupAttachment and client:LookupAttachment(name) or 0
+			if (a and a > 0) then
+				attach = a
+				break
+			end
+		end
+
+		-- Боевая сигнатура util.SpriteTrail: (ent, attach, color, additive,
+		-- startWidth, endWidth, lifetime, textureRes, texture). Ленты КОРОТКИЕ
+		-- (lifetime 0.18/0.14с) и сужаются к концу — шлейф «совсем немного».
+		local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
+		local bright = util.SpriteTrail(client, attach, Color(175, 210, 240, 90), true,
+			4 * scale, 1, 0.18, 0.125, "trails/tube.vmt")
+		local haze = util.SpriteTrail(client, attach, Color(140, 180, 220, 40), true,
+			9 * scale, 2, 0.14, 0.125, "trails/tube.vmt")
+		current = {bright = bright, haze = haze, level = level, hidden = false}
+		client.afterlightCelerityTrail = current
 	end
 
-	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
-	local anchor = ents.Create("prop_dynamic")
-	anchor:SetModel("models/props_junk/watermelon01_chunk01.mdl")
-	anchor:AddEffects(EF_NODRAW)
-	if (bone and bone > 0) then
-		anchor:SetParent(client, bone)
-	else
-		anchor:SetParent(client)
-	end
-	anchor:SetLocalPos(Vector(0, 0, 0))
-	anchor:Spawn()
-
-	-- Боевая сигнатура util.SpriteTrail: (ent, attach, color, additive,
-	-- startWidth, endWidth, lifetime, textureRes, texture). Ленты КОРОТКИЕ
-	-- (lifetime 0.18/0.14с) и сужаются к концу — шлейф «совсем немного».
-	local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
-	local bright = util.SpriteTrail(anchor, 0, Color(175, 210, 240, 90), true,
-		4 * scale, 1, 0.18, 0.125, "trails/tube.vmt")
-	local haze = util.SpriteTrail(anchor, 0, Color(140, 180, 220, 40), true,
-		9 * scale, 2, 0.14, 0.125, "trails/tube.vmt")
-	client.afterlightCelerityTrail = {anchor = anchor, bright = bright, haze = haze,
-		level = level, bone = bone, frozen = false}
-	if (!sprinting) then
-		client.afterlightCelerityTrail.frozen = true
-		anchor:SetParent(nil)
+	if (sprinting and current.hidden) then
+		current.hidden = false
+		current.bright:RemoveEffects(EF_NODRAW)
+		current.haze:RemoveEffects(EF_NODRAW)
+	elseif (!sprinting and !current.hidden) then
+		current.hidden = true
+		current.bright:AddEffects(EF_NODRAW)
+		current.haze:AddEffects(EF_NODRAW)
 	end
 end
 

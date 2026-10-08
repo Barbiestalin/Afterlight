@@ -111,7 +111,9 @@ end}
 util = {
 	AddNetworkString = function() end,
 	SpriteTrail = function(entity, attach, color, additive, startW, endW, life, res, material)
-		local trail = {entity = entity, attach = attach, life = life, startW = startW, endW = endW, material = material, additive = additive, removed = false}
+		local trail = {entity = entity, attach = attach, life = life, startW = startW, endW = endW, material = material, additive = additive, removed = false, nodraw = false}
+		trail.AddEffects = function(self, f) if (f == EF_NODRAW) then self.nodraw = true end end
+		trail.RemoveEffects = function(self, f) if (f == EF_NODRAW) then self.nodraw = false end end
 		trail.Remove = function(self) self.removed = true end
 		trails[#trails + 1] = trail
 		return trail
@@ -178,6 +180,7 @@ local function make_entity(class, isPlayer)
 	entity.SetPlaybackRate = function(self, v) self.playRate = v end
 	entity.GetBonePosition = function() return Vector(0, 0, 60) end
 	entity.LookupBone = function() return 4 end
+	entity.LookupAttachment = function() return 3 end
 	entity.GetModel = function() return "models/player/group01/male_01.mdl" end
 	entity.GetSkin = function() return 0 end
 	entity.GetSequence = function() return 1 end
@@ -251,24 +254,25 @@ check(trailNow ~= nil and trailNow.bright.material == "trails/tube.vmt" and trai
 	"трейл: 3-й уровень рождает ленты «трубы» trails/tube.vmt")
 check(trailNow ~= nil and trailNow.bright.life <= 0.2, "трейл: lifetime короткий — шлейф тянется совсем немного")
 check(trailNow ~= nil and trailNow.bright.startW > trailNow.bright.endW, "трейл: лента сужается к концу — скоростной штрих")
-check(trailNow ~= nil and trailNow.bone == 4, "трейл: якорь прицеплен к кости позвоночника — шлейф из спины, не из ног")
+check(trailNow ~= nil and trailNow.bright.entity == client and trailNow.bright.attach == 3,
+	"трейл: прицеплен к аттачменту самого игрока — ленты выходят из корпуса, без зазора")
 client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
 check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
 	"трейл: спринт не пересоздаёт ленты — никакого «удалился и заново»")
+check(trailNow.bright.nodraw == false and trailNow.haze.nodraw == false,
+	"трейл: нажали спринт — трейл виден")
 client.vel = Vector(0, 0, 0)
 PLUGIN:Think()
 check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
-	"трейл: остановка спринта не убирает ленты — тают сами, как в ванили")
-check(trailNow.anchor.parent == nil, "трейл: без спринта якорь заморожен — при ходьбе ленты не рождаются")
-client.vel = Vector(300, 0, 0)
-PLUGIN:Think()
-check(trailNow.anchor.parent == client, "трейл: со спринтом якорь снова на спине — ленты идут")
+	"трейл: сущности живут всю дисциплину")
+check(trailNow.bright.nodraw == true and trailNow.haze.nodraw == true,
+	"трейл: отжали спринт — трейл скрыт, при ходьбе не виден")
 PLUGIN:ActivateCelerity(client, character, 2)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: до 3-го уровня флаг не поднимается")
-check(client.afterlightCelerityTrail == nil and trailNow.bright.removed == true and trailNow.anchor.removed == true,
+check(client.afterlightCelerityTrail == nil and trailNow.bright.removed == true and trailNow.haze.removed == true,
 	"трейл: ниже 3-го уровня трейл снимается")
 client.vel = Vector(300, 0, 0)
 PLUGIN:ActivateCelerity(client, character, 3)
