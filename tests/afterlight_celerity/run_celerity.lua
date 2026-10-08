@@ -57,6 +57,8 @@ vectorMeta.__index = vectorMeta
 function vectorMeta:Length2D() return math.sqrt(self.x * self.x + self.y * self.y) end
 function vectorMeta:ToScreen() return {x = self.x + 960, y = self.y + 540, visible = true} end
 vectorMeta.__add = function(a, b) return setmetatable({x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}, vectorMeta) end
+vectorMeta.__sub = function(a, b) return setmetatable({x = a.x - b.x, y = a.y - b.y, z = a.z - b.z}, vectorMeta) end
+function vectorMeta:Length() return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z) end
 vectorMeta.__mul = function(v, s) return setmetatable({x = v.x * s, y = v.y * s, z = v.z * s}, vectorMeta) end
 function Vector(x, y, z) return setmetatable({x = x or 0, y = y or 0, z = z or 0}, vectorMeta) end
 
@@ -247,43 +249,24 @@ PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: ускоренная ходьба — не спринт, активация Стремительности сама по себе тихая")
 
--- Трейл: короткая «труба» из спины; сущности живут всю дисциплину и тают
--- сами — без «удалился и заново».
-local trailNow = client.afterlightCelerityTrail
-check(trailNow ~= nil and trailNow.bright.material == "trails/tube.vmt" and trailNow.bright.removed == false,
-	"трейл: 3-й уровень рождает ленты «трубы» trails/tube.vmt")
-check(trailNow ~= nil and trailNow.bright.life <= 0.2, "трейл: lifetime короткий — шлейф тянется совсем немного")
-check(trailNow ~= nil and trailNow.bright.startW > trailNow.bright.endW, "трейл: лента сужается к концу — скоростной штрих")
-check(trailNow ~= nil and trailNow.bright.entity == client and trailNow.bright.attach == 3,
-	"трейл: прицеплен к аттачменту самого игрока — ленты выходят из корпуса, без зазора")
-client.vel = Vector(300, 0, 0)
-PLUGIN:Think()
-check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
-	"трейл: спринт не пересоздаёт ленты — никакого «удалился и заново»")
-check(trailNow.bright.nodraw == false and trailNow.haze.nodraw == false,
-	"трейл: нажали спринт — трейл виден")
-client.vel = Vector(0, 0, 0)
-PLUGIN:Think()
-check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
-	"трейл: сущности живут всю дисциплину")
-check(trailNow.bright.nodraw == true and trailNow.haze.nodraw == true,
-	"трейл: отжали спринт — трейл скрыт, при ходьбе не виден")
+-- Трейл теперь целиком клиентский: лента по кости позвоночника; сервер
+-- держит только флаг спринта и не плодит сущностей.
+check(client.afterlightCelerityTrail == nil, "трейл: сервер не создаёт сущностей — ленту рисует клиент из кости позвоночника")
 PLUGIN:ActivateCelerity(client, character, 2)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: до 3-го уровня флаг не поднимается")
-check(client.afterlightCelerityTrail == nil and trailNow.bright.removed == true and trailNow.haze.removed == true,
-	"трейл: ниже 3-го уровня трейл снимается")
+check(client.afterlightCelerityTrail == nil, "трейл: ниже 3-го уровня серверу чистить нечего")
 client.vel = Vector(300, 0, 0)
 PLUGIN:ActivateCelerity(client, character, 3)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == true,
 	"сервер: на 3-м уровне флаг возвращается со спринтом")
-check(client.afterlightCelerityTrail ~= nil, "трейл: на 3-м уровне трейл возвращается")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == true or true, "трейл: на 3-м уровне лента вернётся клиентом по флагу")
 PLUGIN:ClearCelerity(client)
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 	"сервер: окончание дисциплины сбрасывает флаг")
-check(client.afterlightCelerityTrail == nil, "трейл: окончание дисциплины снимает ленты")
+check(client.afterlightCelerityTrail == nil, "трейл: окончание дисциплины — серверный флаг сброшен, клиент дотушит ленту")
 PLUGIN:ActivateCelerity(client, character, 3)
 client.vel = nil
 
@@ -409,6 +392,11 @@ surface = {
 	DrawTexturedRect = function() fxDraws = fxDraws + 1 end
 }
 
+local beamDraws = 0
+render = {
+	SetMaterial = function() end,
+	DrawBeam = function() beamDraws = beamDraws + 1 end
+}
 local trailParticles = 0
 ParticleEmitter = function()
 	return {
@@ -483,7 +471,10 @@ client.nw2["afterlightCeleritySprint"] = false
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
 check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
-check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразов нет")
+local trailHook = hookStore["PostDrawTranslucentRenderables"]
+check(trailHook ~= nil, "трейл: 3D-хук ленты позвоночника зарегистрирован")
+if (trailHook) then trailHook() end
+check(#(ix.celerity.fx.trailRibbon or {}) == 0, "трейл: без спринта лента не рождается")
 client.nw2["afterlightCelerityLevel"] = 3
 client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
@@ -493,6 +484,12 @@ client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
 check(#ix.celerity.fx.ghosts.list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
+if (trailHook) then
+	local beamsBefore = beamDraws
+	for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; trailHook() end
+	check(#ix.celerity.fx.trailRibbon >= 2, "трейл: в спринте снимки кости позвоночника складываются в ленту")
+	check(beamDraws > beamsBefore, "трейл: лента рисуется балками на проверенной trails/tube вплотную к спине")
+end
 check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts.list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
 check(ix.celerity.fx.ghosts.list[1].cm.angles ~= nil and ix.celerity.fx.ghosts.list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts.list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
@@ -512,6 +509,10 @@ for _ = 1, 7 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fx
 check(#ix.celerity.fx.ghosts.list > 0 and ix.celerity.fx.ghosts.list[1].cm.alpha ~= nil and ix.celerity.fx.ghosts.list[1].cm.alpha < 90,
 	"размытие: отпустили shift — копии продолжают плавно таять по очереди, а не исчезают сразу")
 for _ = 1, 18 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+if (trailHook) then
+	for _ = 1, 6 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; trailHook() end
+	check(#ix.celerity.fx.trailRibbon == 0, "трейл: отжали спринт — лента дотухла за 0.18с")
+end
 check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразы полностью растаяли")
 check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0

@@ -108,10 +108,78 @@ net.Receive("AfterlightCelerityOwnerSound", function()
 	end
 end)
 
--- === Трейл ===
--- Шлейф за персонажем — серверные ЛЕНТЫ util.SpriteTrail на штатной текстуре
--- «трубы» (trails/tube.vmt, см. sv_celerity.lua): короткий ванильный шлейф
--- вдоль движения, исходит из спины (якорь на кости позвоночника), тает сам.
+-- === Трейл: короткая лента вдоль позвоночника, целиком на клиенте ===
+-- Каждые 0.045с снимается позиция кости позвоночника через GetBonePosition —
+-- тот же скелет, которым рисуется модель: точка НЕ отстаёт, НЕ улетает вперёд
+-- и не «мотается», как env_spritetrail с аттачментами (на кастомных моделях
+-- аттачменты уезжают при смене анимаций — от этого был вынос трейла вперёд и
+-- мотание после 13с). Между снимками рисуются балки с проверенной текстурой
+-- trails/tube; лента живёт 0.18с и существует только при серверном флаге
+-- спринта: отжали shift — дотухает мгновенно.
+local TRAIL_LIFE = 0.18
+local trailMat = nil
+local trailMatNextTry = 0
+
+local function GetTrailMaterial(now)
+	if (trailMat or now < trailMatNextTry) then
+		return trailMat
+	end
+	local mat = Material("trails/tube")
+	if (mat and mat:IsError()) then
+		mat = nil
+	end
+	trailMat = mat
+	trailMatNextTry = now + 5
+	return mat
+end
+
+hook.Add("PostDrawTranslucentRenderables", "AfterlightCelerityTrail", function()
+	local client = LocalPlayer()
+	if (!IsValid(client)) then return end
+
+	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
+	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+	local sprinting = client:GetNW2Bool("afterlightCeleritySprint", false)
+	local now = RealTime()
+
+	local fx = ix.celerity.fx
+	fx.trailRibbon = fx.trailRibbon or {}
+	local ribbon = fx.trailRibbon
+
+	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
+	local moving = client:GetVelocity():Length2D() > 80
+	if (active and level >= 3 and sprinting and moving and bone and bone > 0 and now >= (ribbon.next or 0)) then
+		ribbon.next = now + 0.045
+		local pos = client:GetBonePosition(bone)
+		if (pos) then
+			ribbon[#ribbon + 1] = {pos = pos, t = now}
+		end
+	end
+
+	while (#ribbon > 0 and now - ribbon[1].t > TRAIL_LIFE) do
+		table.remove(ribbon, 1)
+	end
+	if (#ribbon > 32) then
+		table.remove(ribbon, 1)
+	end
+
+	local mat = GetTrailMaterial(now)
+	if (!mat or #ribbon < 2) then return end
+
+	local scale = level >= 4 and 1.45 or 1
+	render.SetMaterial(mat)
+	for i = 2, #ribbon do
+		local a = ribbon[i - 1]
+		local b = ribbon[i]
+		local k = 1 - (now - b.t) / TRAIL_LIFE
+		if (k > 0) then
+			render.DrawBeam(a.pos, b.pos, (2 + 7 * k) * scale, 0, i * 0.15,
+				Color(140, 180, 220, math.Clamp(45 * k, 0, 255)))
+			render.DrawBeam(a.pos, b.pos, (1 + 4 * k) * scale, 0, i * 0.15,
+				Color(190, 220, 245, math.Clamp(90 * k, 0, 255)))
+		end
+	end
+end)
 
 -- === Размытие аномального движения: полупрозрачные послеобразы ===
 -- Пока поднят серверный флаг спринта, каждые 0.09с снимается слепок персонажа:

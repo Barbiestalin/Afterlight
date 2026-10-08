@@ -37,17 +37,8 @@ function PLUGIN:ClearCelerity(client)
 		client:SetPlaybackRate(1)
 		client.afterlightRate = 1
 	end
-	-- Трейл снимается, флаг спринта гасится — ни ветер, ни шлейф не
-	-- переживают окончание дисциплины.
-	local trail = client.afterlightCelerityTrail
-	if (trail) then
-		for _, ent in ipairs({trail.bright, trail.haze}) do
-			if (IsValid(ent)) then
-				ent:Remove()
-			end
-		end
-		client.afterlightCelerityTrail = nil
-	end
+	-- Трейл теперь полностью клиентский — серверу чистить нечего.
+	-- Флаг спринта гасится — ветер, размытие и шлейф не переживают окончание.
 	client:SetNW2Bool("afterlightCeleritySprint", false)
 end
 
@@ -158,70 +149,12 @@ local function IsSprinting(client, level, data)
 		and client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
 end
 
--- Трейл цепляется К САМОМУ ИГРОКУ (аттачмент корпуса), а не к стороннему
--- якорю: рендер берёт аттачмент из того же скелета, что и модель, — ленты
--- выходят вплотную к телу, без метрового зазора (сторонняя сущность
--- рассинхронизируется с игроком на клиенте). Показ/скрытие — EF_NODRAW по
--- серверному флагу спринта: нажали shift — трейл появился, отжали — пропал,
--- как и задумано; сущности при этом не пересоздаются.
-local TRAIL_ATTACHMENTS = {"anim_attachment_chest", "chest", "anim_attachment_head", "head", "eyes"}
-
-local function UpdateSpeedTrail(client, level, data, sprinting)
-	local want = data ~= nil and level >= 3 and (data.trail or 0) > 0
-	local current = client.afterlightCelerityTrail
-
-	if (!want) then
-		if (current) then
-			for _, ent in ipairs({current.bright, current.haze}) do
-				if (IsValid(ent)) then
-					ent:Remove()
-				end
-			end
-			client.afterlightCelerityTrail = nil
-		end
-		return
-	end
-
-	if (!current or !IsValid(current.bright) or current.level ~= level) then
-		if (current) then
-			for _, ent in ipairs({current.bright, current.haze}) do
-				if (IsValid(ent)) then
-					ent:Remove()
-				end
-			end
-		end
-
-		local attach = 0
-		for _, name in ipairs(TRAIL_ATTACHMENTS) do
-			local a = client.LookupAttachment and client:LookupAttachment(name) or 0
-			if (a and a > 0) then
-				attach = a
-				break
-			end
-		end
-
-		-- Боевая сигнатура util.SpriteTrail: (ent, attach, color, additive,
-		-- startWidth, endWidth, lifetime, textureRes, texture). Ленты КОРОТКИЕ
-		-- (lifetime 0.18/0.14с) и сужаются к концу — шлейф «совсем немного».
-		local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
-		local bright = util.SpriteTrail(client, attach, Color(175, 210, 240, 90), true,
-			4 * scale, 1, 0.18, 0.125, "trails/tube.vmt")
-		local haze = util.SpriteTrail(client, attach, Color(140, 180, 220, 40), true,
-			9 * scale, 2, 0.14, 0.125, "trails/tube.vmt")
-		current = {bright = bright, haze = haze, level = level, hidden = false}
-		client.afterlightCelerityTrail = current
-	end
-
-	if (sprinting and current.hidden) then
-		current.hidden = false
-		current.bright:RemoveEffects(EF_NODRAW)
-		current.haze:RemoveEffects(EF_NODRAW)
-	elseif (!sprinting and !current.hidden) then
-		current.hidden = true
-		current.bright:AddEffects(EF_NODRAW)
-		current.haze:AddEffects(EF_NODRAW)
-	end
-end
+-- Трейл рисуется КЛИЕНТОМ (cl_celerity.lua): каждую долю секунды снимается
+-- позиция кости позвоночника самого игрока и между снимками рисуется короткая
+-- тающая лента. Точка берётся из того же скелета, которым рисуется модель, —
+-- шлейф не может отстать, уехать вперёд или «мотаться», как env_spritetrail
+-- с аттачментами (те на кастомных моделях уезжают при смене анимаций).
+-- Сервер здесь лишь держит флаг спринта, по которому клиент и рисует.
 
 local lastThink = 0
 
@@ -261,7 +194,6 @@ function PLUGIN:Think()
 		if (client:GetNW2Bool("afterlightCeleritySprint", false) ~= sprinting) then
 			client:SetNW2Bool("afterlightCeleritySprint", sprinting)
 		end
-		UpdateSpeedTrail(client, level, data, sprinting)
 
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end
