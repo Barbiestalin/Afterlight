@@ -164,7 +164,7 @@ end
 -- дисциплины и НЕ пересоздаются при спринте — никакого «удалился и заново».
 -- Якорь — невидимая сущность на кости позвоночника: шлейф исходит из спины,
 -- а не из ног. Схема вызова SpriteTrail — как у штатных трейлов (attach 0).
-local function UpdateSpeedTrail(client, level, data)
+local function UpdateSpeedTrail(client, level, data, sprinting)
 	local want = data ~= nil and level >= 3 and (data.trail or 0) > 0
 	local current = client.afterlightCelerityTrail
 
@@ -180,7 +180,23 @@ local function UpdateSpeedTrail(client, level, data)
 		return
 	end
 
-	if (current and IsValid(current.anchor) and current.level == level) then return end
+	if (current and IsValid(current.anchor) and current.level == level) then
+		-- Ленты рождаются ТОЛЬКО в спринт: без флага якорь заморожен в мире
+		-- (отцеплен), доедающие ленты дотухают; с флагом якорь снова на спине.
+		-- Сущности при этом не пересоздаются — никакого «удалился и заново».
+		if (sprinting and current.frozen) then
+			current.frozen = false
+			if (current.bone and current.bone > 0) then
+				current.anchor:SetParent(client, current.bone)
+			else
+				current.anchor:SetParent(client)
+			end
+		elseif (!sprinting and !current.frozen) then
+			current.frozen = true
+			current.anchor:SetParent(nil)
+		end
+		return
+	end
 	if (current) then
 		for _, ent in ipairs({current.anchor, current.bright, current.haze}) do
 			if (IsValid(ent)) then
@@ -201,12 +217,20 @@ local function UpdateSpeedTrail(client, level, data)
 	anchor:SetLocalPos(Vector(0, 0, 0))
 	anchor:Spawn()
 
+	-- Боевая сигнатура util.SpriteTrail: (ent, attach, color, additive,
+	-- startWidth, endWidth, lifetime, textureRes, texture). Ленты КОРОТКИЕ
+	-- (lifetime 0.18/0.14с) и сужаются к концу — шлейф «совсем немного».
 	local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
 	local bright = util.SpriteTrail(anchor, 0, Color(175, 210, 240, 90), true,
-		0.12, 4 * scale, 1, 0.125, "trails/tube.vmt")
+		4 * scale, 1, 0.18, 0.125, "trails/tube.vmt")
 	local haze = util.SpriteTrail(anchor, 0, Color(140, 180, 220, 40), true,
-		0.1, 9 * scale, 2, 0.125, "trails/tube.vmt")
-	client.afterlightCelerityTrail = {anchor = anchor, bright = bright, haze = haze, level = level}
+		9 * scale, 2, 0.14, 0.125, "trails/tube.vmt")
+	client.afterlightCelerityTrail = {anchor = anchor, bright = bright, haze = haze,
+		level = level, bone = bone, frozen = false}
+	if (!sprinting) then
+		client.afterlightCelerityTrail.frozen = true
+		anchor:SetParent(nil)
+	end
 end
 
 local lastThink = 0
@@ -247,7 +271,7 @@ function PLUGIN:Think()
 		if (client:GetNW2Bool("afterlightCeleritySprint", false) ~= sprinting) then
 			client:SetNW2Bool("afterlightCeleritySprint", sprinting)
 		end
-		UpdateSpeedTrail(client, level, data)
+		UpdateSpeedTrail(client, level, data, sprinting)
 
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end

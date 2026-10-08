@@ -151,7 +151,9 @@ local function UpdateGhosts(client, fx, active, level, sprinting, now)
 				-- момента съёма.
 				cm:SetPlaybackRate(0)
 				cm:SetPos(client:GetPos())
-				cm:SetAngles(client:GetAngles())
+				-- Только yaw: углы игрока несут pitch взгляда, и с ним копии
+				-- «ложились на землю» и переворачивались. Слепок стоит ровно.
+				cm:SetAngles(Angle(0, client:GetAngles().y, 0))
 				ghosts.list[#ghosts.list + 1] = {cm = cm, born = now}
 				if (#ghosts.list > 6) then
 					local old = table.remove(ghosts.list, 1)

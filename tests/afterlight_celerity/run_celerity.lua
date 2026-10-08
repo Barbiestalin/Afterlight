@@ -39,6 +39,7 @@ function istable(value) return type(value) == "table" end
 function isstring(value) return type(value) == "string" end
 function isnumber(value) return type(value) == "number" end
 function Color(r, g, b, a) return {r = r, g = g, b = b, a = a} end
+function Angle(p, y, r) return {p = p or 0, y = y or 0, r = r or 0} end
 
 bit = {band = function(a, b) return a & b end}
 
@@ -109,7 +110,7 @@ ents = {Create = function(class)
 end}
 util = {
 	AddNetworkString = function() end,
-	SpriteTrail = function(entity, attach, color, additive, life, startW, endW, res, material)
+	SpriteTrail = function(entity, attach, color, additive, startW, endW, life, res, material)
 		local trail = {entity = entity, attach = attach, life = life, startW = startW, endW = endW, material = material, additive = additive, removed = false}
 		trail.Remove = function(self) self.removed = true end
 		trails[#trails + 1] = trail
@@ -181,7 +182,7 @@ local function make_entity(class, isPlayer)
 	entity.GetSkin = function() return 0 end
 	entity.GetSequence = function() return 1 end
 	entity.GetCycle = function() return 0.3 end
-	entity.GetAngles = function() return Vector(0, 0, 0) end
+	entity.GetAngles = function() return {p = 45, y = 90, r = 0} end
 	entity.GetVelocity = function(self) return self.vel or Vector(0, 0, 0) end
 	entity.GetPos = function(self) return self.pos or Vector(0, 0, 0) end
 	return entity
@@ -248,9 +249,9 @@ check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
 local trailNow = client.afterlightCelerityTrail
 check(trailNow ~= nil and trailNow.bright.material == "trails/tube.vmt" and trailNow.bright.removed == false,
 	"трейл: 3-й уровень рождает ленты «трубы» trails/tube.vmt")
-check(trailNow ~= nil and trailNow.bright.life <= 0.12, "трейл: ленты короткие — короче шлейфа из моделек")
-check(trailNow ~= nil and trailNow.anchor.parent == client and trailNow.anchor.bone == 4,
-	"трейл: якорь на кости позвоночника — шлейф из спины, не из ног")
+check(trailNow ~= nil and trailNow.bright.life <= 0.2, "трейл: lifetime короткий — шлейф тянется совсем немного")
+check(trailNow ~= nil and trailNow.bright.startW > trailNow.bright.endW, "трейл: лента сужается к концу — скоростной штрих")
+check(trailNow ~= nil and trailNow.bone == 4, "трейл: якорь прицеплен к кости позвоночника — шлейф из спины, не из ног")
 client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
 check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
@@ -259,6 +260,10 @@ client.vel = Vector(0, 0, 0)
 PLUGIN:Think()
 check(client.afterlightCelerityTrail == trailNow and trailNow.bright.removed == false,
 	"трейл: остановка спринта не убирает ленты — тают сами, как в ванили")
+check(trailNow.anchor.parent == nil, "трейл: без спринта якорь заморожен — при ходьбе ленты не рождаются")
+client.vel = Vector(300, 0, 0)
+PLUGIN:Think()
+check(trailNow.anchor.parent == client, "трейл: со спринтом якорь снова на спине — ленты идут")
 PLUGIN:ActivateCelerity(client, character, 2)
 PLUGIN:Think()
 check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
@@ -421,7 +426,7 @@ ClientsideModel = function(model)
 	m.SetSequence = function() end
 	m.SetCycle = function() end
 	m.SetPos = function() end
-	m.SetAngles = function() end
+	m.SetAngles = function(self, a) self.angles = a end
 	m.SetColor = function(self, r, g, b, a)
 		if (type(r) == "table") then self.alpha = r.a else self.alpha = a end
 	end
@@ -486,6 +491,7 @@ check(loopChannel ~= nil and loopChannel.playing, "ветер: серверны�
 check(#ix.celerity.fx.ghosts.list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
 check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts.list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
+check(ix.celerity.fx.ghosts.list[1].cm.angles ~= nil and ix.celerity.fx.ghosts.list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts.list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
