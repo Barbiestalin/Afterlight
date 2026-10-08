@@ -393,9 +393,10 @@ surface = {
 }
 
 local beamDraws = 0
+local beamMaxWidth = 0
 render = {
 	SetMaterial = function() end,
-	DrawBeam = function() beamDraws = beamDraws + 1 end
+	DrawBeam = function(a, b, w) beamDraws = beamDraws + 1; if (w > beamMaxWidth) then beamMaxWidth = w end end
 }
 local trailParticles = 0
 ParticleEmitter = function()
@@ -489,6 +490,7 @@ if (trailHook) then
 	for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; trailHook() end
 	check(#ix.celerity.fx.trailRibbon >= 2, "трейл: в спринте снимки кости позвоночника складываются в ленту")
 	check(beamDraws > beamsBefore, "трейл: лента рисуется балками на проверенной trails/tube вплотную к спине")
+	check(beamMaxWidth >= 20, "трейл: лента широкая — соразмерна туловищу персонажа")
 end
 check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts.list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")

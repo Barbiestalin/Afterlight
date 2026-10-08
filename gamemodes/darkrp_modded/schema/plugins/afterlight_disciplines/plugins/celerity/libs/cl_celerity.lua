@@ -173,10 +173,11 @@ hook.Add("PostDrawTranslucentRenderables", "AfterlightCelerityTrail", function()
 		local b = ribbon[i]
 		local k = 1 - (now - b.t) / TRAIL_LIFE
 		if (k > 0) then
-			render.DrawBeam(a.pos, b.pos, (2 + 7 * k) * scale, 0, i * 0.15,
-				Color(140, 180, 220, math.Clamp(45 * k, 0, 255)))
-			render.DrawBeam(a.pos, b.pos, (1 + 4 * k) * scale, 0, i * 0.15,
-				Color(190, 220, 245, math.Clamp(90 * k, 0, 255)))
+			-- Ширина соразмерна туловищу: широкая бледная полоса + яркое ядро.
+			render.DrawBeam(a.pos, b.pos, (6 + 18 * k) * scale, 0, i * 0.15,
+				Color(140, 180, 220, math.Clamp(50 * k, 0, 255)))
+			render.DrawBeam(a.pos, b.pos, (3 + 11 * k) * scale, 0, i * 0.15,
+				Color(190, 220, 245, math.Clamp(95 * k, 0, 255)))
 		end
 	end
 end)
