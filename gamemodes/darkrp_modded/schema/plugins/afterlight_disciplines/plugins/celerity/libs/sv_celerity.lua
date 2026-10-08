@@ -11,6 +11,8 @@ resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
 -- Оверлеи экранной ауры (прозрачность запечена в png).
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_a.png")
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_b.png")
+-- Рябь «преломления воздуха» (Matrix-трейл) — 2D-оверлей, прозрачность в png.
+resource.AddFile("materials/afterlight/disciplines/celerity/celerity_ripple.png")
 
 PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
 
@@ -37,15 +39,8 @@ function PLUGIN:ClearCelerity(client)
 		client:SetPlaybackRate(1)
 		client.afterlightRate = 1
 	end
-	-- Ленты шлейфа снимаются сразу.
-	if (client.afterlightCelerityTrails) then
-		for _, trail in ipairs(client.afterlightCelerityTrails) do
-			if (IsValid(trail)) then
-				trail:Remove()
-			end
-		end
-		client.afterlightCelerityTrails = nil
-	end
+	-- Флаг спринта гасится — ветер и рябь не переживают окончание дисциплины.
+	client:SetNW2Bool("afterlightCeleritySprint", false)
 end
 
 -- Активация уровня: повторная активация разрешена и сбрасывает таймер,
@@ -146,37 +141,16 @@ local function ShrinkWeaponTimer(weapon, getter, setter, mult, dt, now)
 	end
 end
 
--- «Преломление воздуха»: ЛЕНТОЧНЫЙ трейл util.SpriteTrail, растянутый вдоль
--- движения — это именно скоростной шлейф, а не клубы дыма. Светлая ледяная
--- аддитивная лента плюс тёмная полупрозрачная «тень» вместе читаются как
--- мерцание преломлённого воздуха. Только во время фактического спринта на 3+,
--- снимаются в тот же кадр, как спринт кончился. Текстура ленты — боевой
--- материал trails/smoke.vmt (схема вызова как в pointshop: attach 0).
-local function UpdateSpeedTrail(client, level, data)
+-- Флаг спринта считает СЕРВЕР по авторитетной скорости: GetWalkSpeed на
+-- сервере точный (включая наше ускорение), поэтому порог walk*1.15 отделяет
+-- именно хеликсовский спринт от ходьбы. Клиент лишь читает NW2-флаг — ветер
+-- и рябь живут строго по спринту, а не по факту активации дисциплины.
+local function UpdateSprintFlag(client, level, data)
 	local sprinting = data ~= nil and level >= 3
 		and client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
-
-	local trails = client.afterlightCelerityTrails
-	if (!sprinting) then
-		if (trails) then
-			for _, trail in ipairs(trails) do
-				if (IsValid(trail)) then
-					trail:Remove()
-				end
-			end
-			client.afterlightCelerityTrails = nil
-		end
-		return
+	if (client:GetNW2Bool("afterlightCeleritySprint", false) ~= sprinting) then
+		client:SetNW2Bool("afterlightCeleritySprint", sprinting)
 	end
-
-	if (trails and IsValid(trails[1])) then return end
-
-	local scale = 1 + (level - 3) * 0.45 -- 4-5 уровни: крупный шлейф по ТЗ
-	local bright = util.SpriteTrail(client, 0, Color(170, 205, 240, 70), true,
-		0.35, 4 * scale, 1, 0.125, "trails/smoke.vmt")
-	local shade = util.SpriteTrail(client, 0, Color(6, 10, 16, 50), false,
-		0.28, 9 * scale, 2, 0.125, "trails/smoke.vmt")
-	client.afterlightCelerityTrails = {bright, shade}
 end
 
 local lastThink = 0
@@ -213,7 +187,7 @@ function PLUGIN:Think()
 			client.afterlightRate = wantRate
 		end
 
-		UpdateSpeedTrail(client, level, data)
+		UpdateSprintFlag(client, level, data)
 
 		local weapon = client:GetActiveWeapon()
 		if (!IsValid(weapon)) then continue end

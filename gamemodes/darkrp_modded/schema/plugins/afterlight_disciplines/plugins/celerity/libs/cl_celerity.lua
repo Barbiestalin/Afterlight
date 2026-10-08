@@ -9,7 +9,7 @@ ix.celerity = ix.celerity or {}
 -- редкие ветровые штрихи; шлейф «преломления воздуха» = серверные ленты
 -- util.SpriteTrail + крошечные клиентские искры — только во время фактического
 -- спринта на 3+. Звук ветра — тоже только при спринте.
-ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}, layers = {}}
+ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}, layers = {}, ripple = {samples = {}, next = 0}}
 
 -- === Личные звуки (активация + ветер при спринте) ===
 local ambient = {channel = nil, loading = false, volume = 0, state = "off", startAt = 0, path = nil, pathTry = 0}
@@ -108,43 +108,29 @@ net.Receive("AfterlightCelerityOwnerSound", function()
 	end
 end)
 
--- === Искры disturbed-воздуха (только спринт на 3+) ===
--- Основной шлейф — серверные ЛЕНТЫ util.SpriteTrail, растянутые вдоль движения
--- (см. sv_celerity.lua): это скоростной шлейф, а не дым. Клиент добавляет лишь
--- крошечные короткоживущие аддитивные искры мерцания: они НЕ растут в клубы
--- (размер 1.5-3.5, жизнь 0.1-0.22с) и потому читаются как дрожащий воздух,
--- а не дым. Материалы — только проверенные боем trails/smoke и
--- particle_smokegrenade.
-local TRAIL_MATERIALS = {"trails/smoke", "particle/particle_smokegrenade"}
-local trailEmitter = nil
-local lastTrailSpawn = 0
+-- === Преломление воздуха в стиле Matrix (только спринт на 3+) ===
+-- Референс — «рябь преломлённого воздуха» вокруг тела: ряды волнистых
+-- линзовых штрихов. Реализовано ПРОВЕРЕННЫМ 2D-механизмом (surface +
+-- сгенерированный png с запечённой прозрачностью — так уже работают слои ауры):
+-- во время спринта снимаются мировые «эхо»-точки за персонажем и за спиной
+-- тают ряды ряби (0.6с), плюс живая рябь мерцает на самом теле. Ни частиц, ни
+-- лент — никакого дыма и никакой магенты.
+local RIPPLE_PATH = "afterlight/disciplines/celerity/celerity_ripple.png"
+local rippleMaterial = nil
+local rippleNextTry = 0
 
-local function UpdateTrail(client, active, level, sprinting, now)
-	if (!active or level < 3 or !sprinting) then return end
-	local vel = client:GetVelocity()
-	if (vel:Length2D() < 80) then return end
-	if (now < lastTrailSpawn) then return end
-	lastTrailSpawn = now + 0.03
+local function GetRippleMaterial(now)
+	if (rippleMaterial or now < rippleNextTry) then
+		return rippleMaterial
+	end
 
-	trailEmitter = trailEmitter or ParticleEmitter(client:GetPos())
-	if (!trailEmitter) then return end
-
-	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
-	local origin = (bone and bone > 0 and client:GetBonePosition(bone))
-		or (client:GetPos() + Vector(0, 0, 50))
-
-	local particle = trailEmitter:Add(TRAIL_MATERIALS[math.random(1, #TRAIL_MATERIALS)],
-		origin + Vector(math.Rand(-4, 4), math.Rand(-4, 4), math.Rand(-8, 6)))
-	if (!particle) then return end
-
-	particle:SetDieTime(math.Rand(0.1, 0.22))
-	particle:SetStartAlpha(50)
-	particle:SetEndAlpha(0)
-	particle:SetStartSize(math.Rand(1.5, 3.5))
-	particle:SetEndSize(0.5)
-	particle:SetColor(205, 228, 246)
-	particle:SetVelocity(vel * -0.22 + Vector(math.Rand(-10, 10), math.Rand(-10, 10), math.Rand(-4, 10)))
-	particle:SetRoll(math.Rand(0, 6.28))
+	local mat = file.Exists("materials/" .. RIPPLE_PATH, "GAME") and Material(RIPPLE_PATH) or nil
+	if (mat and mat:IsError()) then
+		mat = nil
+	end
+	rippleMaterial = mat
+	rippleNextTry = now + 5
+	return mat
 end
 
 -- === Нуарная экранная аура ===
@@ -174,20 +160,20 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	local client = LocalPlayer()
 	if (!IsValid(client)) then return end
 	local fx = ix.celerity.fx
+	fx.ripple = fx.ripple or {samples = {}, next = 0}
 
 	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
 	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
-	-- Entity:KeyDown на клиенте не работает — читаем локальную клавиатуру.
-	-- Спринт определяем по факту быстрого движения (работает при любом бинде
-	-- Helix): скорость выше ходьбы * 1.15 — значит, бегут спринтом.
-	local sprinting = client:GetVelocity():Length2D() > client:GetWalkSpeed() * 1.15
+	-- Спринт читаем СЕРВЕРНЫМ флагом: сервер видит точную ходьбу/спринт
+	-- (включая наше ускорение), а клиентские догадки по скорости врали —
+	-- ускоренная ходьба после активации проходила порог, и ветер гудел зря.
+	local sprinting = client:GetNW2Bool("afterlightCeleritySprint", false)
 
 	local dt = FrameTime()
 	local now = RealTime()
 
-	-- Ветер — только когда на 3+ уровне бегут спринтом.
+	-- Ветер — только когда серверный флаг спринта поднят на 3+ уровне.
 	UpdateAmbience(active and level >= 3 and sprinting, now, dt)
-	UpdateTrail(client, active, level, sprinting, now)
 
 	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
 	local target = active and 1 or 0
@@ -198,6 +184,7 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	end
 	if (fx.alpha <= 0.01) then
 		fx.slashes = {}
+		fx.ripple.samples = {}
 		return
 	end
 
@@ -276,6 +263,67 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 				surface.DrawLine(slash.x, slash.y, slash.x + slash.len, slash.y)
 			else
 				surface.DrawLine(slash.x, slash.y, slash.x, slash.y + slash.len)
+			end
+		end
+	end
+
+	-- 4) Преломление воздуха в стиле Matrix: пока серверный флаг спринта поднят,
+	-- за персонажем каждые 0.045с снимаются мировые «эхо»-точки; каждая 0.6с
+	-- тает рябью за спиной — шлейф преломления, а не дым.
+	local ripple = fx.ripple
+	local moving = client:GetVelocity():Length2D() > 80
+	if (active and level >= 3 and sprinting and moving and now >= ripple.next) then
+		ripple.next = now + 0.045
+		local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
+		local origin = (bone and bone > 0 and client:GetBonePosition(bone))
+			or (client:GetPos() + Vector(0, 0, 50))
+		ripple.samples[#ripple.samples + 1] = {
+			pos = origin + Vector(math.Rand(-6, 6), math.Rand(-6, 6), math.Rand(-10, 10)),
+			born = now,
+			scale = level >= 4 and 1.5 or 1
+		}
+		if (#ripple.samples > 26) then
+			table.remove(ripple.samples, 1)
+		end
+	end
+
+	local rmat = GetRippleMaterial(now)
+	if (rmat) then
+		for i = #ripple.samples, 1, -1 do
+			local sample = ripple.samples[i]
+			local age = now - sample.born
+			if (age > 0.6) then
+				table.remove(ripple.samples, i)
+			else
+				local scr = sample.pos:ToScreen()
+				if (scr.visible) then
+					local k = 1 - age / 0.6
+					local w = 150 * sample.scale * (0.75 + 0.25 * k)
+					surface.SetDrawColor(255, 255, 255, math.Clamp(120 * k * fx.alpha, 0, 255))
+					surface.SetMaterial(rmat)
+					surface.DrawTexturedRect(scr.x - w / 2, scr.y - w / 4, w, w / 2)
+				end
+			end
+		end
+
+		-- Живая рябь на теле: два якоря мерцают в противофазе — воздух
+		-- «дрожит» вокруг силуэта, как в референсе.
+		if (active and level >= 3 and sprinting and moving) then
+			local anchors = {
+				client:GetPos() + Vector(0, 0, 62),
+				client:GetPos() + Vector(0, 0, 30)
+			}
+			for i = 1, 2 do
+				local flick = math.sin(now * (6.5 + i * 2.1) + i * 2.4)
+				if (flick > 0.45) then
+					local scr = anchors[i]:ToScreen()
+					if (scr.visible) then
+						local w = (i == 1 and 120 or 160) * (level >= 4 and 1.4 or 1)
+						surface.SetDrawColor(255, 255, 255, math.Clamp(75 * flick * fx.alpha, 0, 255))
+						surface.SetMaterial(rmat)
+						surface.DrawTexturedRect(scr.x - w / 2, scr.y - w / 4, w, w / 2)
+					end
+				end
 			end
 		end
 	end

@@ -53,6 +53,7 @@ vector_origin = {x = 0, y = 0, z = 0}
 local vectorMeta = {}
 vectorMeta.__index = vectorMeta
 function vectorMeta:Length2D() return math.sqrt(self.x * self.x + self.y * self.y) end
+function vectorMeta:ToScreen() return {x = self.x + 960, y = self.y + 540, visible = true} end
 vectorMeta.__add = function(a, b) return setmetatable({x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}, vectorMeta) end
 vectorMeta.__mul = function(v, s) return setmetatable({x = v.x * s, y = v.y * s, z = v.z * s}, vectorMeta) end
 function Vector(x, y, z) return setmetatable({x = x or 0, y = y or 0, z = z or 0}, vectorMeta) end
@@ -154,6 +155,8 @@ local function make_entity(class, isPlayer)
 	entity.GetClass = function(self) return self.class end
 	entity.IsPlayer = function(self) return self.player end
 	entity.GetNW2Int = function(self, key, fallback) return self.nw2[key] or fallback end
+	entity.GetNW2Bool = function(self, key, fallback) if (self.nw2[key] == nil) then return fallback end return self.nw2[key] end
+	entity.SetNW2Bool = function(self, key, value) self.nw2[key] = value end
 	entity.GetNW2Float = function(self, key, fallback) return self.nw2[key] or fallback end
 	entity.SetNW2Int = function(self, key, value) self.nw2[key] = value end
 	entity.SetNW2Float = function(self, key, value) self.nw2[key] = value end
@@ -221,28 +224,32 @@ check(client.walkSpeed == math.Round(130 * 1.6) and client.runSpeed == math.Roun
 	"уровень 3: ходьба и спринт ускорены")
 check(client.playRate == 1.15, "внешняя анимация игрока ускорена в меру темпа атаки")
 
--- Трейл: ленты вдоль движения, только во время фактического спринта на 3+.
+-- Флаг спринта считает сервер по авторитетной скорости; клиент лишь читает.
+-- Ветер и рябь живут строго по нему: активация без спринта — тишина.
 client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
-local speedTrails = client.afterlightCelerityTrails
-check(speedTrails ~= nil and #speedTrails == 2, "трейл: спринт на 3-м уровне рождает две ленты")
-check(speedTrails ~= nil and speedTrails[1].material == "trails/smoke.vmt" and speedTrails[1].removed == false,
-	"трейл: ленты на боевом материале trails/smoke.vmt")
-check(speedTrails ~= nil and speedTrails[1].additive == true and speedTrails[2].additive == false,
-	"трейл: светлая аддитивная лента + тёмная тень = мерцание преломления")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == true,
+	"сервер: флаг спринта поднят при быстром движении")
+client.vel = Vector(200, 0, 0)
+PLUGIN:Think()
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
+	"сервер: ускоренная ходьба — не спринт, активация Стремительности сама по себе тихая")
 client.vel = Vector(0, 0, 0)
 PLUGIN:Think()
-check(speedTrails[1].removed == true and speedTrails[2].removed == true and client.afterlightCelerityTrails == nil,
-	"трейл: спринт кончился — ленты сняты в том же кадре")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
+	"сервер: без спринта флаг опущен")
 PLUGIN:ActivateCelerity(client, character, 2)
 client.vel = Vector(300, 0, 0)
 PLUGIN:Think()
-check(client.afterlightCelerityTrails == nil, "трейл: до 3-го уровня шлейфа нет")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
+	"сервер: до 3-го уровня флаг не поднимается")
 PLUGIN:ActivateCelerity(client, character, 3)
 PLUGIN:Think()
-check(client.afterlightCelerityTrails ~= nil, "трейл: на 3-м уровне в спринте возвращается")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == true,
+	"сервер: на 3-м уровне флаг возвращается со спринтом")
 PLUGIN:ClearCelerity(client)
-check(client.afterlightCelerityTrails == nil, "трейл: окончание дисциплины снимает ленты")
+check(client:GetNW2Bool("afterlightCeleritySprint", false) == false,
+	"сервер: окончание дисциплины сбрасывает флаг")
 PLUGIN:ActivateCelerity(client, character, 3)
 client.vel = nil
 
@@ -423,6 +430,7 @@ check(fxHook ~= nil, "аура скорости: HUD-хук зарегистри
 client.vel = Vector(200, 0, 0)
 client.nw2["afterlightCelerityLevel"] = 2
 client.nw2["afterlightCelerityEnd"] = 1e9
+client.nw2["afterlightCeleritySprint"] = false
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
 check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
@@ -430,10 +438,11 @@ client.nw2["afterlightCelerityLevel"] = 3
 client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel == nil, "ветер молчит: 3-й уровень без спринта")
-check(trailParticles == 0, "трейл без спринта не идёт")
+check(#ix.celerity.fx.ripple.samples == 0, "трейл: ряби преломления без спринта нет")
+client.nw2["afterlightCeleritySprint"] = true
 client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(loopChannel ~= nil and loopChannel.playing, "ветер: фактический спринт на 3+ запускает цикл")
+check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
@@ -444,11 +453,11 @@ for _, path in ipairs(materialPaths) do
 	if (path == "afterlight/disciplines/celerity/celerity_fx_b.png") then layB = true end
 end
 check(layA and layB, "оверлей: слои берутся из afterlight/disciplines/celerity")
-check(trailParticles > 0, "трейл: во время спринта за спиной идут частицы воздуха")
+check(#ix.celerity.fx.ripple.samples > 0, "трейл: рябь преломления в стиле Matrix тянется за спиной в спринте")
+client.nw2["afterlightCeleritySprint"] = false
 client.vel = Vector(0, 0, 0)
-local partsAfter = trailParticles
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(trailParticles == partsAfter, "трейл: спринт кончился — шлейф прекратился")
+check(#ix.celerity.fx.ripple.samples == 0, "трейл: спринт кончился — рябь растаяла")
 check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
