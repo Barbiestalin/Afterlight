@@ -166,8 +166,16 @@ local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
 			if (IsValid(cm)) then
 				cm:SetSkin(ply:GetSkin())
 				cm:SetMaterial(GHOST_MATERIAL)
-				cm:SetSequence(ply:GetSequence())
-				cm:SetCycle(ply:GetCycle())
+				-- Все копии держат ОДИН серединный кадр бегового цикла
+				-- (cycle 0.5 — фаза широкого шага): случайные фазы съёма
+				-- давали «стоячие» позы, по которым не читался бег.
+				local seq = ply:GetSequence()
+				if (cm.ResetSequence) then
+					cm:ResetSequence(seq)
+				else
+					cm:SetSequence(seq)
+				end
+				cm:SetCycle(0.5)
 				-- Замораживаем анимацию слепка: иначе копия доигрывает бег и
 				-- «наклоняется/переворачивается» — слепок держит позу съёма.
 				cm:SetPlaybackRate(0)

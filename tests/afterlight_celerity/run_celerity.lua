@@ -411,8 +411,9 @@ ClientsideModel = function(model)
 	local m = {model = model, removed = false}
 	m.SetMaterial = function(self, v) self.material = v end
 	m.SetSkin = function() end
-	m.SetSequence = function() end
-	m.SetCycle = function() end
+	m.SetSequence = function(self, v) self.sequence = v end
+	m.SetCycle = function(self, v) self.cycle = v end
+	m.ResetSequence = function(self, v) self.sequence = v end
 	m.SetPos = function() end
 	m.SetAngles = function(self, a) self.angles = a end
 	m.SetColor = function(self, r, g, b, a)
@@ -485,6 +486,7 @@ if (trailHook) then
 end
 check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
+check(ix.celerity.fx.ghosts[client].list[1].cm.cycle == 0.5, "размытие: все копии держат серединный кадр бегового цикла — читается широкий шаг")
 check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
