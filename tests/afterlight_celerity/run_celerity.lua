@@ -485,7 +485,7 @@ if (trailHook) then
 	check(beamMaxWidth >= 20, "трейл: лента широкая — соразмерна туловищу персонажа")
 end
 check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
-check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
+check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 1, "размытие: копии проигрывают беговой цикл на месте — читается бег, а не стояние")
 check(ix.celerity.fx.ghosts[client].list[1].cm.cycle == 0.5, "размытие: все копии держат серединный кадр бегового цикла — читается широкий шаг")
 check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
