@@ -2,28 +2,14 @@ local PLUGIN = PLUGIN
 
 ix.celerity = ix.celerity or {}
 
--- ЗВУКИ. Свои файлы кладутся в sound/afterlight/disciplines/celerity и
--- раздаются клиентам (resource.AddFile). Пока файла нет — фолбэк из
--- SOUND_FALLBACKS (активация слышна сразу); петля амбиента до появления
--- файла просто молчит, как у Могущества.
-ix.celerity.SOUND_USE = "afterlight/disciplines/celerity/use.mp3"      -- звук активации
-ix.celerity.SOUND_LOOP = "afterlight/disciplines/celerity/celerity.mp3" -- амбиент на время действия (цикл)
--- путь, куда файл амбиента может быть положен изначально; подхватывается,
--- если в основной папке его нет
-ix.celerity.SOUND_LOOP_LEGACY = "disciplines/celerity/celerity.mp3"
+-- ЗВУК. Единственный файл дисциплины: стартует при активации и играет
+-- циклом вплоть до окончания действия. Файл лежит в ветке afterlight_main
+-- (sound/afterlight/disciplines/celerity/celerity.mp3) и раздаётся клиентам
+-- через resource.AddFile; пока файла нет на клиенте — просто молчит.
+ix.celerity.SOUND_PATH = "afterlight/disciplines/celerity/celerity.mp3"
 
--- Амбиент: громкость (ниже звука активации, чтобы не перекрикивать), пауза
--- после звука активации и длительность плавных входа/выхода в секундах.
-ix.celerity.AMBIENT_VOLUME = 0.7
-ix.celerity.AMBIENT_DELAY = 1.2
-ix.celerity.AMBIENT_FADE = 1
-
--- Громкость личных звуков Стремительности (0..1) — крутить здесь.
-ix.celerity.SOUND_VOLUME = 1
-
-ix.celerity.SOUND_FALLBACKS = {
-	activate = "ambient/wind/wind_med1.wav"
-}
+-- Громкость звука Стремительности (0..1) — крутить здесь.
+ix.celerity.SOUND_VOLUME = 0.9
 
 -- Параметры уровней по ТЗ: множители обычной скорости и спринта (shift),
 -- временные пункты Ловкости (видны в чарлисте), множители скорости атаки

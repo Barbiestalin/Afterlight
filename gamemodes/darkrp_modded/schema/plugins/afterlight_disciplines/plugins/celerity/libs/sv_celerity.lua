@@ -1,27 +1,13 @@
 local PLUGIN = PLUGIN
 
-util.AddNetworkString("AfterlightCelerityOwnerSound")
-
--- Файлы появятся позже; регистрируем пути заранее, чтобы клиенты скачали их
--- сразу после добавления.
-resource.AddFile("sound/" .. ix.celerity.SOUND_USE)
-resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP)
-resource.AddFile("sound/" .. ix.celerity.SOUND_LOOP_LEGACY)
+-- Единственный звук дисциплины; регистрируем путь заранее, чтобы клиенты
+-- скачали файл сразу после добавления.
+resource.AddFile("sound/" .. ix.celerity.SOUND_PATH)
 
 -- Оверлеи экранной ауры (прозрачность запечена в png).
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_a.png")
 resource.AddFile("materials/afterlight/disciplines/celerity/celerity_fx_b.png")
 
-PLUGIN.soundAvailable = PLUGIN.soundAvailable or {}
-
-local function SoundExists(path)
-	local cached = PLUGIN.soundAvailable[path]
-	if (cached == nil) then
-		cached = file.Exists("sound/" .. path, "GAME") == true
-		PLUGIN.soundAvailable[path] = cached
-	end
-	return cached
-end
 
 local function TimerName(client)
 	return "AfterlightCelerity." .. (client:SteamID64() or client:EntIndex())
@@ -57,11 +43,8 @@ function PLUGIN:ActivateCelerity(client, character, level)
 		end
 	end)
 	-- Модификаторы оружия применяются в Think (туда же попадает respawn и
-	-- смена оружия). Звук использования слышит ТОЛЬКО активировавший.
-	net.Start("AfterlightCelerityOwnerSound")
-		net.WriteString(ix.celerity.SOUND_USE)
-		net.WriteString(ix.celerity.SOUND_FALLBACKS.activate)
-	net.Send(client)
+	-- смена оружия). Звук дисциплины клиент ведёт сам по NW2-состоянию.
+	
 	return true
 end
 

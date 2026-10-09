@@ -11,102 +11,30 @@ ix.celerity = ix.celerity or {}
 -- на 3+. Звук ветра — тоже только при спринте.
 ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}, layers = {}}
 
--- === Личные звуки (активация + ветер при спринте) ===
-local ambient = {channel = nil, loading = false, volume = 0, state = "off", startAt = 0, path = nil, pathTry = 0}
-ix.celerity.fx.amb = ambient
+-- === Единственный звук дисциплины: от активации до конца действия ===
+-- celerity.mp3 стартует при активации (любой уровень) и играет циклом, пока
+-- дисциплина не закончится. Клиент следит за NW2-состоянием сам — никаких
+-- net-сообщений. Файла нет на клиенте — молчит без ошибок.
+local disciplineSound = {channel = nil, loading = false}
 
-local function GetLoopPath(now)
-	if (ambient.path or now < ambient.pathTry) then
-		return ambient.path
-	end
-
-	ambient.pathTry = now + 5
-	for _, candidate in ipairs({ix.celerity.SOUND_LOOP, ix.celerity.SOUND_LOOP_LEGACY}) do
-		if (candidate and file.Exists("sound/" .. candidate, "GAME")) then
-			ambient.path = candidate
-			break
-		end
-	end
-	return ambient.path
-end
-
-local function UpdateAmbience(active, now, dt)
-	if (active and ambient.state == "off") then
-		ambient.state = "wait"
-		ambient.startAt = now + (ix.celerity.AMBIENT_DELAY or 1.2)
-	elseif (!active and ambient.state == "wait") then
-		ambient.state = "off"
-	elseif (!active and (ambient.state == "in" or ambient.state == "out")) then
-		ambient.state = "out"
-	elseif (active and ambient.state == "out") then
-		ambient.state = "in"
-	end
-
-	if (ambient.state == "wait" and now >= ambient.startAt) then
-		ambient.state = "in"
-	end
-
-	if ((ambient.state == "in" or ambient.state == "out") and !ambient.channel and !ambient.loading) then
-		local path = GetLoopPath(now)
-		if (path) then
-			ambient.loading = true
-			sound.PlayFile("sound/" .. path, "loop noblock noplay", function(channel)
-				ambient.loading = false
-				if (IsValid(channel)) then
-					ambient.channel = channel
-					channel:SetVolume(0)
-					channel:Play()
-				end
-			end)
-		end
-	end
-
-	local channel = ambient.channel
-	if (!channel) then return end
-
-	if (ambient.state == "in") then
-		ambient.volume = math.min(ambient.volume + dt / (ix.celerity.AMBIENT_FADE or 1), 1)
-	elseif (ambient.state == "out") then
-		ambient.volume = math.max(ambient.volume - dt / (ix.celerity.AMBIENT_FADE or 1), 0)
-	end
-
-	if (ambient.volume <= 0 and ambient.state == "out") then
-		channel:Stop()
-		ambient.channel = nil
-		ambient.state = "off"
-		return
-	end
-
-	channel:SetVolume(ambient.volume * (ix.celerity.AMBIENT_VOLUME or 0.7))
-end
-
--- Звук активации слышит только владелец; PlayFile терпим к mp3, а при ошибке
--- декодирования играет фолбэк вместо тишины.
-local function PlayCelerityFile(path)
-	sound.PlayFile("sound/" .. path, "noplay noblock", function(channel)
-		if (IsValid(channel)) then
-			channel:SetVolume(ix.celerity.SOUND_VOLUME or 1)
-			channel:Play()
-		end
-	end)
-end
-
-net.Receive("AfterlightCelerityOwnerSound", function()
-	local custom = net.ReadString()
-	local fallback = net.ReadString()
-	if (file.Exists("sound/" .. custom, "GAME")) then
-		sound.PlayFile("sound/" .. custom, "noplay noblock", function(channel)
+local function UpdateDisciplineSound(active)
+	if (active and !disciplineSound.channel and !disciplineSound.loading) then
+		disciplineSound.loading = true
+		sound.PlayFile("sound/" .. ix.celerity.SOUND_PATH, "loop noblock noplay", function(channel)
+			disciplineSound.loading = false
 			if (IsValid(channel)) then
-				channel:SetVolume(ix.celerity.SOUND_VOLUME or 1)
+				disciplineSound.channel = channel
+				channel:SetVolume(ix.celerity.SOUND_VOLUME or 0.9)
 				channel:Play()
-			else
-				PlayCelerityFile(fallback)
 			end
 		end)
-	else
-		PlayCelerityFile(fallback)
 	end
-end)
+
+	if (!active and disciplineSound.channel) then
+		disciplineSound.channel:Stop()
+		disciplineSound.channel = nil
+	end
+end
 
 -- === Трейл: короткая лента вдоль позвоночника, целиком на клиенте ===
 -- Каждые 0.045с снимается позиция кости позвоночника через GetBonePosition —
@@ -314,8 +242,8 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	local dt = FrameTime()
 	local now = RealTime()
 
-	-- Ветер — только когда серверный флаг спринта поднят на 3+ уровне.
-	UpdateAmbience(active and level >= 3 and sprinting, now, dt)
+	-- Единственный звук дисциплины: играет всё время действия.
+	UpdateDisciplineSound(active)
 	-- Послеобразы-размытие — по всем игрокам с серверным флагом спринта:
 	-- ваш смаз видят и другие игроки.
 	for _, ply in ipairs(player.GetAll()) do

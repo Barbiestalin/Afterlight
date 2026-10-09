@@ -226,11 +226,6 @@ for _, added in ipairs(addedFiles) do
 		or added == "materials/afterlight/disciplines/celerity/celerity_fx_b.png") then hasFx = hasFx + 1 end
 end
 check(hasFx == 2, "оверлеи экранной ауры раздаются клиентам")
-local ownerNet = 0
-for _, entry in ipairs(netLog) do
-	if (entry.name == "AfterlightCelerityOwnerSound" and entry.target == client) then ownerNet = ownerNet + 1 end
-end
-check(ownerNet == 1, "звук активации — персональный net владельцу")
 
 -- Скорость выставляется в Think и снимается после окончания.
 PLUGIN:Think()
@@ -457,10 +452,6 @@ local clientOk = pcall(function()
 end)
 check(clientOk, "клиентская библиотека загружается без ошибок")
 
--- Звук активации играет только владелец.
-netReadQueue = {ix.celerity.SOUND_USE, ix.celerity.SOUND_FALLBACKS.activate}
-netHandlers["AfterlightCelerityOwnerSound"]()
-check(playedFiles[1] == "sound/" .. ix.celerity.SOUND_USE, "звук активации играет владелец")
 
 -- Аура и амбиент: плавный вход, отрисовка, плавный выход и остановка петли.
 local fxHook = hookStore["HUDPaint"]
@@ -471,7 +462,7 @@ client.nw2["afterlightCelerityEnd"] = 1e9
 client.nw2["afterlightCeleritySprint"] = false
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
-check(loopChannel == nil, "ветер молчит: до 3-го уровня и без спринта")
+check(loopChannel ~= nil and loopChannel.playing, "звук: celerity.mp3 играет с активации (уже на 2-м уровне)")
 local trailHook = hookStore["PostDrawTranslucentRenderables"]
 check(trailHook ~= nil, "трейл: 3D-хук ленты позвоночника зарегистрирован")
 if (trailHook) then trailHook() end
@@ -480,11 +471,10 @@ check(rib0 == nil or #rib0 == 0, "трейл: без спринта лента �
 client.nw2["afterlightCelerityLevel"] = 3
 client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(loopChannel == nil, "ветер молчит: 3-й уровень без спринта")
 client.nw2["afterlightCeleritySprint"] = true
 client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
+check(loopChannel.volume == ix.celerity.SOUND_VOLUME, "звук: громкость из настроек дисциплины")
 check(#ix.celerity.fx.ghosts[client].list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
 if (trailHook) then
 	local beamsBefore = beamDraws
@@ -497,7 +487,6 @@ check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/fro
 check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
 check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
 check(fxDraws > 0, "оверлей: два слоя штрихов рисуются поверх виньетки")
 local layA, layB = false, false
@@ -517,13 +506,14 @@ if (trailHook) then
 	check(#ix.celerity.fx.trailRibbons[client] == 0, "трейл: отжали спринт — лента дотухла за 0.18с")
 end
 check(#ix.celerity.fx.ghosts[client].list == 0, "размытие: без спринта послеобразы полностью растаяли")
-check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
+check(loopChannel.stopped ~= true, "звук: не зависит от спринта — играет до конца действия")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 0, "аура: плавно гаснет за 1 секунду")
 local drawsAfter = rectDraws
 fxHook()
 check(rectDraws == drawsAfter, "аура: после затухания не рисуется")
+check(loopChannel.stopped == true, "звук: дисциплина кончилась — celerity.mp3 остановлен")
 
 -- ===== Итог =====
 io.write(string.format("Проверок Стремительности: %d, провалено: %d\n", checks, failures))
