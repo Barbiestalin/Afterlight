@@ -1,0 +1,407 @@
+local PLUGIN = PLUGIN
+
+-- libs включаются в алфавитном порядке: cl_celerity.lua идёт РАНЬШЕ
+-- sh_celerity_levels.lua, поэтому таблицу создаём здесь сами.
+ix.celerity = ix.celerity or {}
+
+-- Нуарная аура скорости: процедурная тёмная виньетка + два наложенных слоя
+-- светлых штрихов (png с запечённой прозрачностью), живущих своими вспышками,
+-- редкие ветровые штрихи; шлейф — серверные ленты util.SpriteTrail на штатной
+-- текстуре «трубы» (trails/tube.vmt) — только во время фактического спринта
+-- на 3+. Звук ветра — тоже только при спринте.
+ix.celerity.fx = ix.celerity.fx or {alpha = 0, slashes = {}, layers = {}}
+
+-- === Единственный звук дисциплины: от активации до конца действия ===
+-- celerity.wav стартует при активации (любой уровень) и играет циклом, пока
+-- дисциплина не закончится. Клиент следит за NW2-состоянием сам — никаких
+-- net-сообщений. Файла нет на клиенте — молчит без ошибок.
+local disciplineSound = {channel = nil, loading = false}
+
+local function UpdateDisciplineSound(active)
+	if (active and !disciplineSound.channel and !disciplineSound.loading) then
+		disciplineSound.loading = true
+		sound.PlayFile("sound/" .. ix.celerity.SOUND_PATH, "loop noblock noplay", function(channel)
+			disciplineSound.loading = false
+			if (IsValid(channel)) then
+				disciplineSound.channel = channel
+				channel:SetVolume(ix.celerity.SOUND_VOLUME or 0.9)
+				channel:Play()
+			end
+		end)
+	end
+
+	if (!active and disciplineSound.channel) then
+		disciplineSound.channel:Stop()
+		disciplineSound.channel = nil
+	end
+end
+
+-- === Трейл: короткая лента вдоль позвоночника, целиком на клиенте ===
+-- Каждые 0.045с снимается позиция кости позвоночника через GetBonePosition —
+-- тот же скелет, которым рисуется модель: точка НЕ отстаёт, НЕ улетает вперёд
+-- и не «мотается», как env_spritetrail с аттачментами (на кастомных моделях
+-- аттачменты уезжают при смене анимаций — от этого был вынос трейла вперёд и
+-- мотание после 13с). Между снимками рисуются балки с проверенной текстурой
+-- trails/tube; лента живёт 0.18с и существует только при серверном флаге
+-- спринта: отжали shift — дотухает мгновенно.
+local TRAIL_LIFE = 0.18
+local trailMat = nil
+local trailMatNextTry = 0
+
+local function GetTrailMaterial(now)
+	if (trailMat or now < trailMatNextTry) then
+		return trailMat
+	end
+	local mat = Material("trails/tube")
+	if (mat and mat:IsError()) then
+		mat = nil
+	end
+	trailMat = mat
+	trailMatNextTry = now + 5
+	return mat
+end
+
+hook.Add("PostDrawTranslucentRenderables", "AfterlightCelerityTrail", function()
+	local now = RealTime()
+	local fx = ix.celerity.fx
+	fx.trailRibbons = fx.trailRibbons or {}
+	local mat = GetTrailMaterial(now)
+
+	-- Лента за КАЖДЫМ игроком с флагом: другие видят ваш шлейф, вы — чужой.
+	for _, ply in ipairs(player.GetAll()) do
+		local ribbon = fx.trailRibbons[ply]
+		if (!ribbon) then
+			ribbon = {}
+			fx.trailRibbons[ply] = ribbon
+		end
+
+		local level = IsValid(ply) and ply:GetNW2Int("afterlightCelerityLevel", 0) or 0
+		local active = level > 0 and ply:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+		local sprinting = ply:GetNW2Bool("afterlightCeleritySprint", false)
+		local moving = IsValid(ply) and ply:GetVelocity():Length2D() > 80
+
+		if (mat and active and level >= 3 and sprinting and moving) then
+			local bone = ply.LookupBone and ply:LookupBone("ValveBiped.Bip01_Spine2") or nil
+			if (bone and bone > 0 and now >= (ribbon.next or 0)) then
+				ribbon.next = now + 0.045
+				local pos = ply:GetBonePosition(bone)
+				if (pos) then
+					ribbon[#ribbon + 1] = {pos = pos, t = now}
+				end
+			end
+		end
+
+		while (#ribbon > 0 and now - ribbon[1].t > TRAIL_LIFE) do
+			table.remove(ribbon, 1)
+		end
+		if (#ribbon > 32) then
+			table.remove(ribbon, 1)
+		end
+
+		if (mat and #ribbon >= 2) then
+			local scale = level >= 4 and 1.45 or 1
+			render.SetMaterial(mat)
+			for i = 2, #ribbon do
+				local a = ribbon[i - 1]
+				local b = ribbon[i]
+				local k = 1 - (now - b.t) / TRAIL_LIFE
+				if (k > 0) then
+					-- Ширина соразмерна туловищу: широкая бледная полоса + яркое ядро.
+					render.DrawBeam(a.pos, b.pos, (6 + 18 * k) * scale, 0, i * 0.15,
+						Color(140, 180, 220, math.Clamp(50 * k, 0, 255)))
+					render.DrawBeam(a.pos, b.pos, (3 + 11 * k) * scale, 0, i * 0.15,
+						Color(190, 220, 245, math.Clamp(95 * k, 0, 255)))
+				end
+			end
+		end
+	end
+end)
+
+-- === Размытие аномального движения: полупрозрачные послеобразы ===
+-- Пока поднят серверный флаг спринта, каждые 0.09с снимается слепок персонажа:
+-- clientside-копия модели с полупрозрачным матовым стеклом остаётся в точке
+-- съёма и тает за 0.3с. Несколько тающих копий подряд = силуэт буквально
+-- «размывается» из общего вида, как при аномальной скорости. Если материала
+-- нет на клиенте — послеобразы молча отключаются, трейл продолжает работать.
+local GHOST_MATERIAL = "models/props_c17/frostedglass_01a"
+local ghostOk = nil
+local ghostNextTry = 0
+
+local function GhostsAvailable(now)
+	if (ghostOk ~= nil or now < ghostNextTry) then
+		return ghostOk == true
+	end
+	ghostOk = file.Exists("materials/" .. GHOST_MATERIAL .. ".vmt", "GAME") == true
+		and !Material(GHOST_MATERIAL):IsError()
+	ghostNextTry = now + 5
+	return ghostOk
+end
+
+local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
+	fx.ghosts = fx.ghosts or {}
+	if (!IsValid(ply)) then
+		local dead = fx.ghosts[ply]
+		if (dead) then
+			for _, entry in ipairs(dead.list) do
+				if (IsValid(entry.cm)) then
+					entry.cm:Remove()
+				end
+			end
+			fx.ghosts[ply] = nil
+		end
+		return
+	end
+
+	local ghosts = fx.ghosts[ply]
+	if (!ghosts) then
+		ghosts = {list = {}, next = 0}
+		fx.ghosts[ply] = ghosts
+	end
+	local moving = ply:GetVelocity():Length2D() > 150
+
+	if (active and level >= 3 and sprinting and moving and GhostsAvailable(now)) then
+		if (now >= ghosts.next) then
+			ghosts.next = now + 0.09
+			local cm = ClientsideModel(ply:GetModel())
+			if (IsValid(cm)) then
+				cm:SetSkin(ply:GetSkin())
+				cm:SetMaterial(GHOST_MATERIAL)
+				-- Все копии держат ОДИН серединный кадр бегового цикла
+				-- (cycle 0.5 — фаза широкого шага): случайные фазы съёма
+				-- давали «стоячие» позы, по которым не читался бег.
+				local seq = ply:GetSequence()
+				if (cm.ResetSequence) then
+					cm:ResetSequence(seq)
+				else
+					cm:SetSequence(seq)
+				end
+				cm:SetCycle(0.5)
+				-- Копия ПРОИГРЫВАЕТ беговой цикл на месте (начиная с
+				-- серединного кадра): замороженные статуи читались как
+				-- «стоит», а бегущий силуэт — как «только что бежал».
+				-- Углы уже только yaw, так что доигрывание не кладёт копию.
+				cm:SetPlaybackRate(1)
+				cm:SetPos(ply:GetPos())
+				-- Только yaw: углы игрока несут pitch взгляда, и с ним копии
+				-- «ложились на землю» и переворачивались. Слепок стоит ровно.
+				cm:SetAngles(Angle(0, ply:GetAngles().y, 0))
+				ghosts.list[#ghosts.list + 1] = {cm = cm, born = now}
+				if (#ghosts.list > 6) then
+					local old = table.remove(ghosts.list, 1)
+					if (IsValid(old.cm)) then
+						old.cm:Remove()
+					end
+				end
+			end
+		end
+	end
+
+	for i = #ghosts.list, 1, -1 do
+		local entry = ghosts.list[i]
+		local life = entry.life or 0.55
+		local age = now - entry.born
+		if (age > life or !IsValid(entry.cm)) then
+			if (IsValid(entry.cm)) then
+				entry.cm:Remove()
+			end
+			table.remove(ghosts.list, i)
+		else
+			-- Entity:SetColor в GMod принимает Color-таблицу (расширение
+			-- entity.lua), четыре числа ломают хук. Плавное поочерёдное
+			-- затухание каждой копии за 0.55с.
+			local k = 1 - age / life
+			entry.cm:SetColor(Color(185, 215, 240, math.Clamp(90 * k, 0, 255)))
+		end
+	end
+end
+
+-- === Уклонение: рывок-смаз в сторону от атаки ===
+-- Сервер шлёт всем факт уклонения; клиент строит веер из трёх смещённых
+-- перпендикулярно атакующему послеобразов с быстрым затуханием (0.25с) —
+-- силуэт «смазывается и отшагивает», удар читается как промах.
+local function SpawnDodgeBurst(ply, attacker, now)
+	if (!IsValid(ply) or !GhostsAvailable(now)) then return end
+
+	local fx = ix.celerity.fx
+	fx.ghosts = fx.ghosts or {}
+	local ghosts = fx.ghosts[ply]
+	if (!ghosts) then
+		ghosts = {list = {}, next = 0}
+		fx.ghosts[ply] = ghosts
+	end
+
+	local d = (IsValid(attacker) and attacker ~= ply) and (ply:GetPos() - attacker:GetPos()) or Vector(0, 1, 0)
+	d = Vector(d.x, d.y, 0)
+	local len = d:Length()
+	if (len < 1) then
+		d = Vector(0, 1, 0)
+		len = 1
+	end
+	local side = Vector(-d.y / len, d.x / len, 0)
+	local sign = math.random(1, 2) * 2 - 3 -- -1 или 1
+	local yaw = ply:GetAngles().y
+
+	for i = 1, 3 do
+		local cm = ClientsideModel(ply:GetModel())
+		if (!IsValid(cm)) then continue end
+		cm:SetSkin(ply:GetSkin())
+		cm:SetMaterial(GHOST_MATERIAL)
+		if (cm.ResetSequence) then
+			cm:ResetSequence(ply:GetSequence())
+		else
+			cm:SetSequence(ply:GetSequence())
+		end
+		cm:SetCycle(0.5)
+		cm:SetPlaybackRate(1)
+		cm:SetPos(ply:GetPos() + side * (sign * i * 9))
+		cm:SetAngles(Angle(0, yaw, 0))
+		ghosts.list[#ghosts.list + 1] = {cm = cm, born = now, life = 0.25}
+	end
+end
+
+net.Receive("AfterlightCelerityDodge", function()
+	local ply = net.ReadEntity()
+	local attacker = net.ReadEntity()
+	SpawnDodgeBurst(ply, attacker, RealTime())
+end)
+
+-- === Нуарная экранная аура ===
+local LAYER_PATHS = {
+	"afterlight/disciplines/celerity/celerity_fx_a.png",
+	"afterlight/disciplines/celerity/celerity_fx_b.png"
+}
+local layerMaterials = {}
+
+local function GetLayerMaterial(index, now)
+	local entry = layerMaterials[index]
+	if (entry and (entry.mat or now < entry.nextTry)) then
+		return entry.mat
+	end
+
+	local mat = file.Exists("materials/" .. LAYER_PATHS[index], "GAME") and Material(LAYER_PATHS[index]) or nil
+	if (mat and mat:IsError()) then
+		mat = nil
+	end
+	layerMaterials[index] = {mat = mat, nextTry = now + 5}
+	return mat
+end
+
+local BANDS = 26
+
+hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
+	local client = LocalPlayer()
+	if (!IsValid(client)) then return end
+	local fx = ix.celerity.fx
+
+	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
+	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+	-- Спринт читаем СЕРВЕРНЫМ флагом: сервер видит точную ходьбу/спринт
+	-- (включая наше ускорение), а клиентские догадки по скорости врали —
+	-- ускоренная ходьба после активации проходила порог, и ветер гудел зря.
+	local sprinting = client:GetNW2Bool("afterlightCeleritySprint", false)
+
+	local dt = FrameTime()
+	local now = RealTime()
+
+	-- Единственный звук дисциплины: играет всё время действия.
+	UpdateDisciplineSound(active)
+	-- Послеобразы-размытие — по всем игрокам с серверным флагом спринта:
+	-- ваш смаз видят и другие игроки.
+	for _, ply in ipairs(player.GetAll()) do
+		local lvl = ply:GetNW2Int("afterlightCelerityLevel", 0)
+		local act = lvl > 0 and ply:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+		local spr = ply:GetNW2Bool("afterlightCeleritySprint", false)
+		UpdateGhostsFor(ply, fx, act, lvl, spr, now)
+	end
+
+	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
+	local target = active and 1 or 0
+	if (fx.alpha < target) then
+		fx.alpha = math.min(fx.alpha + dt, 1)
+	elseif (fx.alpha > target) then
+		fx.alpha = math.max(fx.alpha - dt, 0)
+	end
+	if (fx.alpha <= 0.01) then
+		fx.slashes = {}
+		return
+	end
+
+	local w, h = ScrW(), ScrH()
+
+	-- 1) Готическая виньетка: края экрана мягко темнеют полосами градиента —
+	-- вампир видит мир «своим» зрением. Процедурно, без текстур.
+	local band = math.min(w, h) * 0.16
+	local step = band / BANDS
+	local breathe = 0.85 + 0.1 * math.sin(now * 1.3)
+	for i = 1, BANDS do
+		local t = (i - 0.5) / BANDS
+		local alpha = math.Clamp(150 * (1 - t) * (1 - t) * breathe * fx.alpha, 0, 255)
+		if (alpha < 1) then break end
+		local inset = (i - 1) * step
+		surface.SetDrawColor(2, 3, 5, alpha)
+		surface.DrawRect(inset, inset, w - inset * 2, step)
+		surface.DrawRect(inset, h - inset - step, w - inset * 2, step)
+		surface.DrawRect(inset, inset + step, step, h - (inset + step) * 2)
+		surface.DrawRect(w - inset - step, inset + step, step, h - (inset + step) * 2)
+	end
+
+	-- 2) Два наложенных слоя светлых штрихов: каждый живёт своей вспышкой —
+	-- слои мерцают в противофазе, экран «анимируется» скоростью.
+	for index = 1, #LAYER_PATHS do
+		local layer = fx.layers[index]
+		if (!layer) then
+			layer = {env = 0, target = 0, next = 0}
+			fx.layers[index] = layer
+		end
+
+		layer.target = layer.target * math.exp(-dt * 2.0)
+		if (now >= layer.next) then
+			layer.next = now + math.Rand(0.35, 1.1)
+			layer.target = math.Rand(0.45, 1)
+		end
+		layer.env = layer.env + (layer.target - layer.env) * math.min(1, dt * 12)
+
+		local phase = 0.7 + 0.3 * math.sin(now * (1.9 + index * 0.7) + index * 2.1)
+		local strength = math.Clamp(layer.env * phase * 0.8 * fx.alpha, 0, 1)
+		local material = GetLayerMaterial(index, now)
+		if (material and strength > 0.03) then
+			surface.SetDrawColor(255, 255, 255, math.Clamp(255 * strength, 0, 255))
+			surface.SetMaterial(material)
+			surface.DrawTexturedRect(0, 0, w, h)
+		end
+	end
+
+	-- 3) Редкие тонкие штрихи ветра у краёв: не больше четырёх одновременно,
+	-- живут доли секунды — скорость чувствуется, экран не захламляется.
+	fx.slashes = fx.slashes or {}
+	if (active and #fx.slashes < 4 and math.Rand(0, 1) < dt * 2.5) then
+		local horizontal = math.Rand(0, 1) < 0.7
+		local slash = {life = 0, max = math.Rand(0.18, 0.4), horizontal = horizontal}
+		if (horizontal) then
+			slash.len = math.Rand(90, 260)
+			slash.x = math.Rand(0, w - slash.len)
+			slash.y = math.Rand(0, 1) < 0.5 and math.Rand(0, h * 0.22) or math.Rand(h * 0.78, h)
+		else
+			slash.len = math.Rand(70, 180)
+			slash.x = math.Rand(0, 1) < 0.5 and math.Rand(0, w * 0.18) or math.Rand(w * 0.82, w)
+			slash.y = math.Rand(0, h - slash.len)
+		end
+		fx.slashes[#fx.slashes + 1] = slash
+	end
+
+	for index = #fx.slashes, 1, -1 do
+		local slash = fx.slashes[index]
+		slash.life = slash.life + dt
+		if (slash.life >= slash.max) then
+			table.remove(fx.slashes, index)
+		else
+			local k = math.sin(math.pi * slash.life / slash.max)
+			surface.SetDrawColor(205, 222, 238, math.Clamp(70 * k * fx.alpha, 0, 255))
+			if (slash.horizontal) then
+				surface.DrawLine(slash.x, slash.y, slash.x + slash.len, slash.y)
+			else
+				surface.DrawLine(slash.x, slash.y, slash.x, slash.y + slash.len)
+			end
+		end
+	end
+end)
