@@ -215,20 +215,17 @@ local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
 	end
 end
 
--- === Уклонение: рывок-смаз в сторону от атаки ===
--- Сервер шлёт всем факт уклонения; клиент строит веер из трёх смещённых
--- перпендикулярно атакующему послеобразов с быстрым затуханием (0.25с) —
--- силуэт «смазывается и отшагивает», удар читается как промах.
-local function SpawnDodgeBurst(ply, attacker, now)
-	if (!IsValid(ply) or !GhostsAvailable(now)) then return end
+-- === Уклонение: сам силуэт отшагивает от атаки ===
+-- На 0.25с настоящая модель скрывается (SetNoDraw — локально у каждого
+-- клиента), а полупрозрачная реплика копирует живую позу и делает рывок в
+-- сторону от атакующего и обратно (синусоида). Со стороны персонаж САМ
+-- уклоняется, удар проходит мимо — это не клон из шлейфа, а тело в рывке.
+local DODGE_TIME = 0.25
+local dodgeState = {}
+ix.celerity.dodgeState = dodgeState
 
-	local fx = ix.celerity.fx
-	fx.ghosts = fx.ghosts or {}
-	local ghosts = fx.ghosts[ply]
-	if (!ghosts) then
-		ghosts = {list = {}, next = 0}
-		fx.ghosts[ply] = ghosts
-	end
+local function StartDodge(ply, attacker, now)
+	if (!IsValid(ply)) then return end
 
 	local d = (IsValid(attacker) and attacker ~= ply) and (ply:GetPos() - attacker:GetPos()) or Vector(0, 1, 0)
 	d = Vector(d.x, d.y, 0)
@@ -237,32 +234,58 @@ local function SpawnDodgeBurst(ply, attacker, now)
 		d = Vector(0, 1, 0)
 		len = 1
 	end
-	local side = Vector(-d.y / len, d.x / len, 0)
-	local sign = math.random(1, 2) * 2 - 3 -- -1 или 1
-	local yaw = ply:GetAngles().y
+	local sign = math.random(1, 2) * 2 - 3
 
-	for i = 1, 3 do
-		local cm = ClientsideModel(ply:GetModel())
-		if (!IsValid(cm)) then continue end
-		cm:SetSkin(ply:GetSkin())
-		cm:SetMaterial(GHOST_MATERIAL)
-		if (cm.ResetSequence) then
-			cm:ResetSequence(ply:GetSequence())
+	local st = dodgeState[ply]
+	if (st and st.actor and IsValid(st.actor)) then
+		st.actor:Remove()
+	end
+
+	local actor = ClientsideModel(ply:GetModel())
+	dodgeState[ply] = {start = now, side = Vector(-d.y / len, d.x / len, 0) * sign, actor = actor}
+	if (IsValid(actor)) then
+		actor:SetSkin(ply:GetSkin())
+		actor:SetMaterial(GHOST_MATERIAL)
+		actor:SetPlaybackRate(1)
+	end
+	-- Тело «отдаётся» реплике на время рывка.
+	ply:SetNoDraw(true)
+end
+
+local function UpdateDodges(now)
+	for ply, st in pairs(dodgeState) do
+		if (!IsValid(ply)) then
+			if (st.actor and IsValid(st.actor)) then
+				st.actor:Remove()
+			end
+			dodgeState[ply] = nil
 		else
-			cm:SetSequence(ply:GetSequence())
+			local t = now - st.start
+			if (t >= DODGE_TIME) then
+				ply:SetNoDraw(false)
+				if (st.actor and IsValid(st.actor)) then
+					st.actor:Remove()
+				end
+				dodgeState[ply] = nil
+			else
+				local actor = st.actor
+				if (IsValid(actor)) then
+					-- Реплика зеркалит живую позу и уходит-возвращается.
+					actor:SetSequence(ply:GetSequence())
+					actor:SetCycle(ply:GetCycle())
+					actor:SetPos(ply:GetPos() + st.side * (22 * math.sin(math.pi * (t / DODGE_TIME))))
+					actor:SetAngles(Angle(0, ply:GetAngles().y, 0))
+					actor:SetColor(Color(200, 225, 245, 210))
+				end
+			end
 		end
-		cm:SetCycle(0.5)
-		cm:SetPlaybackRate(1)
-		cm:SetPos(ply:GetPos() + side * (sign * i * 9))
-		cm:SetAngles(Angle(0, yaw, 0))
-		ghosts.list[#ghosts.list + 1] = {cm = cm, born = now, life = 0.25}
 	end
 end
 
 net.Receive("AfterlightCelerityDodge", function()
 	local ply = net.ReadEntity()
 	local attacker = net.ReadEntity()
-	SpawnDodgeBurst(ply, attacker, RealTime())
+	StartDodge(ply, attacker, RealTime())
 end)
 
 -- === Нуарная экранная аура ===
@@ -313,6 +336,8 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 		local spr = ply:GetNW2Bool("afterlightCeleritySprint", false)
 		UpdateGhostsFor(ply, fx, act, lvl, spr, now)
 	end
+	-- Рывки-уклоны: тело отшагивает и возвращается.
+	UpdateDodges(now)
 
 	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
 	local target = active and 1 or 0

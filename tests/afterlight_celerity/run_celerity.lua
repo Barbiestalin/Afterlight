@@ -183,6 +183,9 @@ local function make_entity(class, isPlayer)
 	entity.LookupAttachment = function() return 2 end
 	entity.KeyDown = function(self, key) return self.keys ~= nil and self.keys[key] == true end
 	entity.SetPlaybackRate = function(self, v) self.playRate = v end
+	entity.SetNoDraw = function(self, v) self.noDraw = v end
+	entity.GetBloodColor = function(self) return self.blood or 0 end
+	entity.SetBloodColor = function(self, v) self.blood = v end
 	entity.GetBonePosition = function() return Vector(0, 0, 60) end
 	entity.LookupBone = function() return 4 end
 	entity.LookupAttachment = function() return 3 end
@@ -223,6 +226,7 @@ check(math.abs(client:GetNW2Float("afterlightCelerityEnd", 0) - (currentTime + 1
 check(PLUGIN:GetActiveLevel(client) == 3, "GetActiveLevel = 3")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "dexterity") == 3, "бонус Ловкости +3 в чарлисте")
 check(PLUGIN:GetCharacterVTMStatBonus(character, "strength") == nil, "бонус только к Ловкости")
+check(client.blood == -1, "кровь: на время уклонений движковая кровь отключена (DONT_BLEED)")
 local hasFx = 0
 for _, added in ipairs(addedFiles) do
 	if (added == "materials/afterlight/disciplines/celerity/celerity_fx_a.png"
@@ -334,6 +338,7 @@ check(dodgeNet >= 1, "уклонение: сервер шлёт всем кли�
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_CLUB))
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH))
 check(client:GetNW2Int("afterlightCelerityDodges", 0) == 0, "уклонения потрачены")
+check(client.blood == 0, "кровь: уклонения кончились — кровь восстановлена")
 check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH)) == nil, "после 3-х уклонений урон проходит")
 
 PLUGIN:ActivateCelerity(client, character, 4)
@@ -350,6 +355,7 @@ check(PLUGIN:EntityTakeDamage(client, bulletInfo5) == 0 and bulletInfo5.damage =
 
 -- Окончание действия: таймер чистит состояние, скорость возвращается.
 PLUGIN:ActivateCelerity(client, character, 1)
+check(client.blood == 0, "кровь: активация без уклонений возвращает кровь")
 currentTime = currentTime + 11
 stepTimers()
 check(client:GetNW2Int("afterlightCelerityLevel", 0) == 0, "после 10с уровень сброшен")
@@ -496,11 +502,14 @@ end
 check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 1, "размытие: копии проигрывают беговой цикл на месте — читается бег, а не стояние")
 check(ix.celerity.fx.ghosts[client].list[1].cm.cycle == 0.5, "размытие: все копии держат серединный кадр бегового цикла — читается широкий шаг")
-local ghostsBefore = #ix.celerity.fx.ghosts[client].list
 netReadQueue = {client, client}
 netHandlers["AfterlightCelerityDodge"]()
-check(#ix.celerity.fx.ghosts[client].list == ghostsBefore + 3, "уклонение: попадание рождает веер из 3 смещённых в сторону послеобразов")
-check(ix.celerity.fx.ghosts[client].list[#ix.celerity.fx.ghosts[client].list].life == 0.25, "уклонение: рывок-смаз тает быстрее шлейфа (0.25с)")
+local dodge = ix.celerity.dodgeState[client]
+check(dodge ~= nil and client.noDraw == true and dodge.actor ~= nil,
+	"уклонение: тело скрыто и отшагивает полупрозрачной репликой — не клон из шлейфа")
+for _ = 1, 8 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
+check(client.noDraw == false and ix.celerity.dodgeState[client] == nil,
+	"уклонение: через 0.25с тело возвращено, рывок завершён")
 check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")

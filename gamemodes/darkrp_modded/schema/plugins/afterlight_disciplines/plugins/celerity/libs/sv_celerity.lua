@@ -15,8 +15,31 @@ local function TimerName(client)
 	return "AfterlightCelerity." .. (client:SteamID64() or client:EntIndex())
 end
 
+-- Кровь глушится, пока уклонения в запасе: движок сеет её в TraceAttack ДО
+-- нашего обнуления урона, и атакующий видит кровь при «промахе». DONT_BLEED
+-- (-1) на время уклонений; восстановление, когда уклонения кончились или
+-- дисциплина завершилась.
+local function RestoreBlood(client)
+	if (client.afterlightOrigBlood ~= nil) then
+		client:SetBloodColor(client.afterlightOrigBlood)
+		client.afterlightOrigBlood = nil
+	end
+end
+
+local function SuppressBlood(client, data)
+	if ((data.dodge or 0) > 0 and client.SetBloodColor) then
+		if (client.afterlightOrigBlood == nil) then
+			client.afterlightOrigBlood = client.GetBloodColor and client:GetBloodColor() or 0
+		end
+		client:SetBloodColor(-1)
+	else
+		RestoreBlood(client)
+	end
+end
+
 function PLUGIN:ClearCelerity(client)
 	timer.Remove(TimerName(client))
+	RestoreBlood(client)
 	client:SetNW2Int("afterlightCelerityLevel", 0)
 	client:SetNW2Float("afterlightCelerityEnd", 0)
 	client:SetNW2Int("afterlightCelerityDodges", 0)
@@ -39,6 +62,7 @@ function PLUGIN:ActivateCelerity(client, character, level)
 	client:SetNW2Int("afterlightCelerityLevel", level)
 	client:SetNW2Float("afterlightCelerityEnd", CurTime() + data.duration)
 	client:SetNW2Int("afterlightCelerityDodges", data.dodge or 0)
+	SuppressBlood(client, data)
 	timer.Create(TimerName(client), data.duration, 1, function()
 		if (IsValid(client)) then
 			self:ClearCelerity(client)
@@ -246,7 +270,11 @@ function PLUGIN:EntityTakeDamage(entity, damageInfo)
 	local bullet = bit.band(damageType, DMG_BULLET) != 0 or bit.band(damageType, DMG_BUCKSHOT) != 0
 
 	if (melee or (bullet and data.dodgeBullets)) then
-		entity:SetNW2Int("afterlightCelerityDodges", remaining - 1)
+		local left = remaining - 1
+		entity:SetNW2Int("afterlightCelerityDodges", left)
+		if (left <= 0) then
+			RestoreBlood(entity)
+		end
 		damageInfo:SetDamage(0)
 		-- Всем клиентам: в момент «попадания» вампир уклоняется рывком —
 		-- атакующий видит промах, а не кровь при нулевом уроне.
