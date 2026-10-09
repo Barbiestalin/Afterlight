@@ -475,7 +475,8 @@ check(loopChannel == nil, "ветер молчит: до 3-го уровня и 
 local trailHook = hookStore["PostDrawTranslucentRenderables"]
 check(trailHook ~= nil, "трейл: 3D-хук ленты позвоночника зарегистрирован")
 if (trailHook) then trailHook() end
-check(#(ix.celerity.fx.trailRibbon or {}) == 0, "трейл: без спринта лента не рождается")
+local rib0 = (ix.celerity.fx.trailRibbons or {})[client]
+check(rib0 == nil or #rib0 == 0, "трейл: без спринта лента не рождается")
 client.nw2["afterlightCelerityLevel"] = 3
 client.vel = Vector(0, 0, 0)
 for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
@@ -484,17 +485,17 @@ client.nw2["afterlightCeleritySprint"] = true
 client.vel = Vector(300, 0, 0)
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel ~= nil and loopChannel.playing, "ветер: серверный флаг спринта на 3+ запускает цикл")
-check(#ix.celerity.fx.ghosts.list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
+check(#ix.celerity.fx.ghosts[client].list > 0, "размытие: в спринте рождаются послеобразы модели — силуэт «смазывается»")
 if (trailHook) then
 	local beamsBefore = beamDraws
 	for _ = 1, 10 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; trailHook() end
-	check(#ix.celerity.fx.trailRibbon >= 2, "трейл: в спринте снимки кости позвоночника складываются в ленту")
+	check(#ix.celerity.fx.trailRibbons[client] >= 2, "трейл: в спринте снимки кости позвоночника складываются в ленту")
 	check(beamDraws > beamsBefore, "трейл: лента рисуется балками на проверенной trails/tube вплотную к спине")
 	check(beamMaxWidth >= 20, "трейл: лента широкая — соразмерна туловищу персонажа")
 end
-check(ix.celerity.fx.ghosts.list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
-check(ix.celerity.fx.ghosts.list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
-check(ix.celerity.fx.ghosts.list[1].cm.angles ~= nil and ix.celerity.fx.ghosts.list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts.list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
+check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
+check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 0, "размытие: анимация слепка заморожена — копия не наклоняется и не переворачивается")
+check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(loopChannel.volume == ix.celerity.AMBIENT_VOLUME, "амбиент: плавно набрал рабочую громкость")
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")
@@ -508,14 +509,14 @@ check(layA and layB, "оверлей: слои берутся из afterlight/di
 client.nw2["afterlightCeleritySprint"] = false
 client.vel = Vector(0, 0, 0)
 for _ = 1, 7 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
-check(#ix.celerity.fx.ghosts.list > 0 and ix.celerity.fx.ghosts.list[1].cm.alpha ~= nil and ix.celerity.fx.ghosts.list[1].cm.alpha < 90,
+check(#ix.celerity.fx.ghosts[client].list > 0 and ix.celerity.fx.ghosts[client].list[1].cm.alpha ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.alpha < 90,
 	"размытие: отпустили shift — копии продолжают плавно таять по очереди, а не исчезают сразу")
 for _ = 1, 18 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 if (trailHook) then
 	for _ = 1, 6 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; trailHook() end
-	check(#ix.celerity.fx.trailRibbon == 0, "трейл: отжали спринт — лента дотухла за 0.18с")
+	check(#ix.celerity.fx.trailRibbons[client] == 0, "трейл: отжали спринт — лента дотухла за 0.18с")
 end
-check(#ix.celerity.fx.ghosts.list == 0, "размытие: без спринта послеобразы полностью растаяли")
+check(#ix.celerity.fx.ghosts[client].list == 0, "размытие: без спринта послеобразы полностью растаяли")
 check(loopChannel.stopped, "ветер: спринт кончился — плавно затух и остановился")
 client.nw2["afterlightCelerityLevel"] = 0
 for _ = 1, 25 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end

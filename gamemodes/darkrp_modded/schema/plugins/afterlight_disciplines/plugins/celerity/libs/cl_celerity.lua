@@ -134,50 +134,57 @@ local function GetTrailMaterial(now)
 end
 
 hook.Add("PostDrawTranslucentRenderables", "AfterlightCelerityTrail", function()
-	local client = LocalPlayer()
-	if (!IsValid(client)) then return end
-
-	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
-	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
-	local sprinting = client:GetNW2Bool("afterlightCeleritySprint", false)
 	local now = RealTime()
-
 	local fx = ix.celerity.fx
-	fx.trailRibbon = fx.trailRibbon or {}
-	local ribbon = fx.trailRibbon
-
-	local bone = client.LookupBone and client:LookupBone("ValveBiped.Bip01_Spine2") or nil
-	local moving = client:GetVelocity():Length2D() > 80
-	if (active and level >= 3 and sprinting and moving and bone and bone > 0 and now >= (ribbon.next or 0)) then
-		ribbon.next = now + 0.045
-		local pos = client:GetBonePosition(bone)
-		if (pos) then
-			ribbon[#ribbon + 1] = {pos = pos, t = now}
-		end
-	end
-
-	while (#ribbon > 0 and now - ribbon[1].t > TRAIL_LIFE) do
-		table.remove(ribbon, 1)
-	end
-	if (#ribbon > 32) then
-		table.remove(ribbon, 1)
-	end
-
+	fx.trailRibbons = fx.trailRibbons or {}
 	local mat = GetTrailMaterial(now)
-	if (!mat or #ribbon < 2) then return end
 
-	local scale = level >= 4 and 1.45 or 1
-	render.SetMaterial(mat)
-	for i = 2, #ribbon do
-		local a = ribbon[i - 1]
-		local b = ribbon[i]
-		local k = 1 - (now - b.t) / TRAIL_LIFE
-		if (k > 0) then
-			-- Ширина соразмерна туловищу: широкая бледная полоса + яркое ядро.
-			render.DrawBeam(a.pos, b.pos, (6 + 18 * k) * scale, 0, i * 0.15,
-				Color(140, 180, 220, math.Clamp(50 * k, 0, 255)))
-			render.DrawBeam(a.pos, b.pos, (3 + 11 * k) * scale, 0, i * 0.15,
-				Color(190, 220, 245, math.Clamp(95 * k, 0, 255)))
+	-- Лента за КАЖДЫМ игроком с флагом: другие видят ваш шлейф, вы — чужой.
+	for _, ply in ipairs(player.GetAll()) do
+		local ribbon = fx.trailRibbons[ply]
+		if (!ribbon) then
+			ribbon = {}
+			fx.trailRibbons[ply] = ribbon
+		end
+
+		local level = IsValid(ply) and ply:GetNW2Int("afterlightCelerityLevel", 0) or 0
+		local active = level > 0 and ply:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+		local sprinting = ply:GetNW2Bool("afterlightCeleritySprint", false)
+		local moving = IsValid(ply) and ply:GetVelocity():Length2D() > 80
+
+		if (mat and active and level >= 3 and sprinting and moving) then
+			local bone = ply.LookupBone and ply:LookupBone("ValveBiped.Bip01_Spine2") or nil
+			if (bone and bone > 0 and now >= (ribbon.next or 0)) then
+				ribbon.next = now + 0.045
+				local pos = ply:GetBonePosition(bone)
+				if (pos) then
+					ribbon[#ribbon + 1] = {pos = pos, t = now}
+				end
+			end
+		end
+
+		while (#ribbon > 0 and now - ribbon[1].t > TRAIL_LIFE) do
+			table.remove(ribbon, 1)
+		end
+		if (#ribbon > 32) then
+			table.remove(ribbon, 1)
+		end
+
+		if (mat and #ribbon >= 2) then
+			local scale = level >= 4 and 1.45 or 1
+			render.SetMaterial(mat)
+			for i = 2, #ribbon do
+				local a = ribbon[i - 1]
+				local b = ribbon[i]
+				local k = 1 - (now - b.t) / TRAIL_LIFE
+				if (k > 0) then
+					-- Ширина соразмерна туловищу: широкая бледная полоса + яркое ядро.
+					render.DrawBeam(a.pos, b.pos, (6 + 18 * k) * scale, 0, i * 0.15,
+						Color(140, 180, 220, math.Clamp(50 * k, 0, 255)))
+					render.DrawBeam(a.pos, b.pos, (3 + 11 * k) * scale, 0, i * 0.15,
+						Color(190, 220, 245, math.Clamp(95 * k, 0, 255)))
+				end
+			end
 		end
 	end
 end)
@@ -202,27 +209,44 @@ local function GhostsAvailable(now)
 	return ghostOk
 end
 
-local function UpdateGhosts(client, fx, active, level, sprinting, now)
-	local ghosts = fx.ghosts
-	local moving = client:GetVelocity():Length2D() > 150
+local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
+	fx.ghosts = fx.ghosts or {}
+	if (!IsValid(ply)) then
+		local dead = fx.ghosts[ply]
+		if (dead) then
+			for _, entry in ipairs(dead.list) do
+				if (IsValid(entry.cm)) then
+					entry.cm:Remove()
+				end
+			end
+			fx.ghosts[ply] = nil
+		end
+		return
+	end
+
+	local ghosts = fx.ghosts[ply]
+	if (!ghosts) then
+		ghosts = {list = {}, next = 0}
+		fx.ghosts[ply] = ghosts
+	end
+	local moving = ply:GetVelocity():Length2D() > 150
 
 	if (active and level >= 3 and sprinting and moving and GhostsAvailable(now)) then
 		if (now >= ghosts.next) then
 			ghosts.next = now + 0.09
-			local cm = ClientsideModel(client:GetModel())
+			local cm = ClientsideModel(ply:GetModel())
 			if (IsValid(cm)) then
-				cm:SetSkin(client:GetSkin())
+				cm:SetSkin(ply:GetSkin())
 				cm:SetMaterial(GHOST_MATERIAL)
-				cm:SetSequence(client:GetSequence())
-				cm:SetCycle(client:GetCycle())
+				cm:SetSequence(ply:GetSequence())
+				cm:SetCycle(ply:GetCycle())
 				-- Замораживаем анимацию слепка: иначе копия доигрывает бег и
-				-- «наклоняется/переворачивается» — слепок должен держать позу
-				-- момента съёма.
+				-- «наклоняется/переворачивается» — слепок держит позу съёма.
 				cm:SetPlaybackRate(0)
-				cm:SetPos(client:GetPos())
+				cm:SetPos(ply:GetPos())
 				-- Только yaw: углы игрока несут pitch взгляда, и с ним копии
 				-- «ложились на землю» и переворачивались. Слепок стоит ровно.
-				cm:SetAngles(Angle(0, client:GetAngles().y, 0))
+				cm:SetAngles(Angle(0, ply:GetAngles().y, 0))
 				ghosts.list[#ghosts.list + 1] = {cm = cm, born = now}
 				if (#ghosts.list > 6) then
 					local old = table.remove(ghosts.list, 1)
@@ -279,7 +303,6 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 	local client = LocalPlayer()
 	if (!IsValid(client)) then return end
 	local fx = ix.celerity.fx
-	fx.ghosts = fx.ghosts or {list = {}, next = 0}
 
 	local level = client:GetNW2Int("afterlightCelerityLevel", 0)
 	local active = level > 0 and client:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
@@ -293,8 +316,14 @@ hook.Add("HUDPaint", "AfterlightCelerityScreenFx", function()
 
 	-- Ветер — только когда серверный флаг спринта поднят на 3+ уровне.
 	UpdateAmbience(active and level >= 3 and sprinting, now, dt)
-	-- Послеобразы-размытие — по тому же серверному флагу спринта.
-	UpdateGhosts(client, fx, active, level, sprinting, now)
+	-- Послеобразы-размытие — по всем игрокам с серверным флагом спринта:
+	-- ваш смаз видят и другие игроки.
+	for _, ply in ipairs(player.GetAll()) do
+		local lvl = ply:GetNW2Int("afterlightCelerityLevel", 0)
+		local act = lvl > 0 and ply:GetNW2Float("afterlightCelerityEnd", 0) > CurTime()
+		local spr = ply:GetNW2Bool("afterlightCeleritySprint", false)
+		UpdateGhostsFor(ply, fx, act, lvl, spr, now)
+	end
 
 	-- Плавные вход и выход ауры: 1 секунда в каждую сторону.
 	local target = active and 1 or 0
