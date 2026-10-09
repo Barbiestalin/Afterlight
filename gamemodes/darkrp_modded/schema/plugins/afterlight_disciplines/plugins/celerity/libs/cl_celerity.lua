@@ -198,8 +198,9 @@ local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
 
 	for i = #ghosts.list, 1, -1 do
 		local entry = ghosts.list[i]
+		local life = entry.life or 0.55
 		local age = now - entry.born
-		if (age > 0.55 or !IsValid(entry.cm)) then
+		if (age > life or !IsValid(entry.cm)) then
 			if (IsValid(entry.cm)) then
 				entry.cm:Remove()
 			end
@@ -208,11 +209,61 @@ local function UpdateGhostsFor(ply, fx, active, level, sprinting, now)
 			-- Entity:SetColor в GMod принимает Color-таблицу (расширение
 			-- entity.lua), четыре числа ломают хук. Плавное поочерёдное
 			-- затухание каждой копии за 0.55с.
-			local k = 1 - age / 0.55
+			local k = 1 - age / life
 			entry.cm:SetColor(Color(185, 215, 240, math.Clamp(90 * k, 0, 255)))
 		end
 	end
 end
+
+-- === Уклонение: рывок-смаз в сторону от атаки ===
+-- Сервер шлёт всем факт уклонения; клиент строит веер из трёх смещённых
+-- перпендикулярно атакующему послеобразов с быстрым затуханием (0.25с) —
+-- силуэт «смазывается и отшагивает», удар читается как промах.
+local function SpawnDodgeBurst(ply, attacker, now)
+	if (!IsValid(ply) or !GhostsAvailable(now)) then return end
+
+	local fx = ix.celerity.fx
+	fx.ghosts = fx.ghosts or {}
+	local ghosts = fx.ghosts[ply]
+	if (!ghosts) then
+		ghosts = {list = {}, next = 0}
+		fx.ghosts[ply] = ghosts
+	end
+
+	local d = (IsValid(attacker) and attacker ~= ply) and (ply:GetPos() - attacker:GetPos()) or Vector(0, 1, 0)
+	d = Vector(d.x, d.y, 0)
+	local len = d:Length()
+	if (len < 1) then
+		d = Vector(0, 1, 0)
+		len = 1
+	end
+	local side = Vector(-d.y / len, d.x / len, 0)
+	local sign = math.random(1, 2) * 2 - 3 -- -1 или 1
+	local yaw = ply:GetAngles().y
+
+	for i = 1, 3 do
+		local cm = ClientsideModel(ply:GetModel())
+		if (!IsValid(cm)) then continue end
+		cm:SetSkin(ply:GetSkin())
+		cm:SetMaterial(GHOST_MATERIAL)
+		if (cm.ResetSequence) then
+			cm:ResetSequence(ply:GetSequence())
+		else
+			cm:SetSequence(ply:GetSequence())
+		end
+		cm:SetCycle(0.5)
+		cm:SetPlaybackRate(1)
+		cm:SetPos(ply:GetPos() + side * (sign * i * 9))
+		cm:SetAngles(Angle(0, yaw, 0))
+		ghosts.list[#ghosts.list + 1] = {cm = cm, born = now, life = 0.25}
+	end
+end
+
+net.Receive("AfterlightCelerityDodge", function()
+	local ply = net.ReadEntity()
+	local attacker = net.ReadEntity()
+	SpawnDodgeBurst(ply, attacker, RealTime())
+end)
 
 -- === Нуарная экранная аура ===
 local LAYER_PATHS = {

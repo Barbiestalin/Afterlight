@@ -91,8 +91,11 @@ net = {
 	Start = function(name) netLog[#netLog + 1] = {name = name, strings = {}} end,
 	WriteString = function(value) local entry = netLog[#netLog]; entry.strings[#entry.strings + 1] = value end,
 	Send = function(target) netLog[#netLog].target = target end,
+	Broadcast = function() netLog[#netLog].target = "all" end,
+	WriteEntity = function(value) local entry = netLog[#netLog]; entry.entities = entry.entities or {}; entry.entities[#entry.entities + 1] = value end,
 	Receive = function(name, fn) netHandlers[name] = fn end,
-	ReadString = function() return table.remove(netReadQueue, 1) end
+	ReadString = function() return table.remove(netReadQueue, 1) end,
+	ReadEntity = function() return table.remove(netReadQueue, 1) end
 }
 
 addedFiles = {}
@@ -314,7 +317,8 @@ local function damageInfoOf(dmgType)
 		type = dmgType, damage = 10,
 		GetDamageType = function(self) return self.type end,
 		SetDamage = function(self, value) self.damage = value end,
-		GetInflictor = function() return hands end
+		GetInflictor = function() return hands end,
+		GetAttacker = function() return hands end
 	}
 end
 local slashInfo = damageInfoOf(DMG_SLASH)
@@ -322,6 +326,11 @@ local result = PLUGIN:EntityTakeDamage(client, slashInfo)
 check(result == 0 and slashInfo.damage == 0 and client:GetNW2Int("afterlightCelerityDodges", 0) == 2,
 	"уровень 3: ближний удар уклонён, урон обнулён в damageInfo (осталось 2)")
 check(PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_BULLET)) == nil, "уровень 3: пули ещё не уклоняются")
+local dodgeNet = 0
+for _, entry in ipairs(netLog) do
+	if (entry.name == "AfterlightCelerityDodge" and entry.target == "all" and entry.entities and entry.entities[1] == client) then dodgeNet = dodgeNet + 1 end
+end
+check(dodgeNet >= 1, "уклонение: сервер шлёт всем клиентам факт уклонения — для рывка-смаза")
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_CLUB))
 PLUGIN:EntityTakeDamage(client, damageInfoOf(DMG_SLASH))
 check(client:GetNW2Int("afterlightCelerityDodges", 0) == 0, "уклонения потрачены")
@@ -487,6 +496,11 @@ end
 check(ix.celerity.fx.ghosts[client].list[1].cm.material == "models/props_c17/frostedglass_01a", "размытие: послеобразы на полупрозрачном стекле — без магенты")
 check(ix.celerity.fx.ghosts[client].list[1].cm.playbackRate == 1, "размытие: копии проигрывают беговой цикл на месте — читается бег, а не стояние")
 check(ix.celerity.fx.ghosts[client].list[1].cm.cycle == 0.5, "размытие: все копии держат серединный кадр бегового цикла — читается широкий шаг")
+local ghostsBefore = #ix.celerity.fx.ghosts[client].list
+netReadQueue = {client, client}
+netHandlers["AfterlightCelerityDodge"]()
+check(#ix.celerity.fx.ghosts[client].list == ghostsBefore + 3, "уклонение: попадание рождает веер из 3 смещённых в сторону послеобразов")
+check(ix.celerity.fx.ghosts[client].list[#ix.celerity.fx.ghosts[client].list].life == 0.25, "уклонение: рывок-смаз тает быстрее шлейфа (0.25с)")
 check(ix.celerity.fx.ghosts[client].list[1].cm.angles ~= nil and ix.celerity.fx.ghosts[client].list[1].cm.angles.p == 0 and ix.celerity.fx.ghosts[client].list[1].cm.angles.y == 90, "размытие: копии стоят ровно — только yaw, pitch взгляда не переносится")
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(rectDraws > 0, "нуарная виньетка рисуется процедурно — без текстур и загрузок")

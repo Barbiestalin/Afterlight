@@ -1,5 +1,7 @@
 local PLUGIN = PLUGIN
 
+util.AddNetworkString("AfterlightCelerityDodge")
+
 -- Единственный звук дисциплины; регистрируем путь заранее, чтобы клиенты
 -- скачали файл сразу после добавления.
 resource.AddFile("sound/" .. ix.celerity.SOUND_PATH)
@@ -246,6 +248,12 @@ function PLUGIN:EntityTakeDamage(entity, damageInfo)
 	if (melee or (bullet and data.dodgeBullets)) then
 		entity:SetNW2Int("afterlightCelerityDodges", remaining - 1)
 		damageInfo:SetDamage(0)
+		-- Всем клиентам: в момент «попадания» вампир уклоняется рывком —
+		-- атакующий видит промах, а не кровь при нулевом уроне.
+		net.Start("AfterlightCelerityDodge")
+			net.WriteEntity(entity)
+			net.WriteEntity(IsValid(damageInfo:GetAttacker()) and damageInfo:GetAttacker() or entity)
+		net.Broadcast()
 		return 0
 	end
 end
