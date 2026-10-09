@@ -9,14 +9,14 @@ ix.potence.CRACK_LIFETIME = 8
 -- ЗВУКИ. Свои файлы use/punch/door лежат в ветке (sound/afterlight/disciplines/potence)
 -- и раздаются клиентам (resource.AddFile). Пока своего файла нет, играет
 -- стоковый фолбэк из SOUND_FALLBACKS (эффект слышен сразу).
-ix.potence.SOUND_USE = "afterlight/disciplines/potence/use.mp3"      -- звучит при активации/использовании Могущества
-ix.potence.SOUND_PUNCH = "afterlight/disciplines/potence/punch.mp3"  -- особый удар (2+), поверх стандартного звука HL2
-ix.potence.SOUND_DOOR = "afterlight/disciplines/potence/door.mp3"    -- выбивание двери (4+)
+ix.potence.SOUND_USE = "afterlight/disciplines/potence/use.wav"      -- звучит при активации/использовании Могущества
+ix.potence.SOUND_PUNCH = "afterlight/disciplines/potence/punch.wav"  -- особый удар (2+), поверх стандартного звука HL2
+ix.potence.SOUND_DOOR = "afterlight/disciplines/potence/door.wav"    -- выбивание двери (4+)
 ix.potence.SOUND_JUMP = "afterlight/disciplines/potence/jump_air.wav"      -- колебание воздуха при прыжке (2+)
 ix.potence.SOUND_CRACK = "afterlight/disciplines/potence/crack_impact.wav" -- удар земли при прыжке (3+)
-ix.potence.SOUND_LOOP = "afterlight/disciplines/potence/potence.mp3" -- амбиент на время действия (цикл)
+ix.potence.SOUND_LOOP = "afterlight/disciplines/potence/potence.wav" -- амбиент на время действия (цикл)
 -- путь, куда файл амбиента положен изначально; подхватывается, если в основной папке его нет
-ix.potence.SOUND_LOOP_LEGACY = "disciplines/potence/potence.mp3"
+ix.potence.SOUND_LOOP_LEGACY = "disciplines/potence/potence.wav"
 -- Амбиент: громкость (ниже звука активации, чтобы не перекрикивать), пауза
 -- после звука активации и длительность плавных входа/выхода в секундах.
 ix.potence.AMBIENT_VOLUME = 0.7

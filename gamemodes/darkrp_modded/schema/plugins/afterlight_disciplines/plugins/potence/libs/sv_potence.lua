@@ -42,7 +42,7 @@ local function EmitWithFallback(entity, customPath, fallbackPath, volume)
 end
 
 -- Звук удара шлётся клиентам в радиусе и играется каждым локально через
--- PlayFile на полной громкости: серверный EmitSound режет mp3 заметно тише,
+-- PlayFile на полной громкости: серверный EmitSound режет громкость заметно тише,
 -- из-за чего удар было «либо не слышно, либо очень плохо».
 function PLUGIN:BroadcastPotenceSound(origin, customPath, fallbackPath, radius)
 	local listeners = {}

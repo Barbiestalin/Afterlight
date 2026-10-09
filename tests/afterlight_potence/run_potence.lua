@@ -404,12 +404,12 @@ end
 
 -- Пути звуков зарезервированы для будущих файлов.
 local joined = table.concat(addedFiles, "|")
-check(joined:find("afterlight/disciplines/potence/use.mp3", 1, true) ~= nil, "звук использования use.mp3 зарегистрирован")
-check(joined:find("afterlight/disciplines/potence/punch.mp3", 1, true) ~= nil, "звук удара punch.mp3 зарегистрирован")
-check(joined:find("afterlight/disciplines/potence/door.mp3", 1, true) ~= nil, "звук двери door.mp3 зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/use.wav", 1, true) ~= nil, "звук использования use.wav зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/punch.wav", 1, true) ~= nil, "звук удара punch.wav зарегистрирован")
+check(joined:find("afterlight/disciplines/potence/door.wav", 1, true) ~= nil, "звук двери door.wav зарегистрирован")
 check(joined:find("afterlight/disciplines/potence/jump_air.wav", 1, true) ~= nil, "зарезервирован звук прыжка")
 
--- use.mp3 играет ТОЛЬКО у владельца (PlayFile), при отказе декодера — фолбэк.
+-- use.wav играет ТОЛЬКО у владельца (PlayFile), фолбэк при отсутствии файла.
 local playedFiles = {}
 local playFileDecodes = true
 sound = {PlayFile = function(path, flags, cb)
@@ -430,7 +430,7 @@ file.Exists = function() return true end
 netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
 netHandlers["AfterlightPotenceOwnerSound"]()
 check(#playedFiles == 1 and playedFiles[1] == "sound/" .. ix.potence.SOUND_USE,
-	"use.mp3: играет только владелец")
+	"use.wav: играет только владелец")
 playFileDecodes = false
 netReadQueue = {ix.potence.SOUND_USE, ix.potence.SOUND_FALLBACKS.activate}
 netHandlers["AfterlightPotenceOwnerSound"]()
@@ -489,7 +489,7 @@ local loopChannel = nil
 local oldPlayFile = sound.PlayFile
 sound.PlayFile = function(path, flags, cb)
 	playedFiles[#playedFiles + 1] = path
-	if (path:find("potence.mp3", 1, true)) then
+	if (path:find("potence.wav", 1, true)) then
 		loopChannel = {
 			flags = flags, volume = 0, stopped = false,
 			Play = function(self) self.playing = true end,

@@ -4,9 +4,9 @@ ix.celerity = ix.celerity or {}
 
 -- ЗВУК. Единственный файл дисциплины: стартует при активации и играет
 -- циклом вплоть до окончания действия. Файл лежит в ветке afterlight_main
--- (sound/afterlight/disciplines/celerity/celerity.mp3) и раздаётся клиентам
+-- (sound/afterlight/disciplines/celerity/celerity.wav) и раздаётся клиентам
 -- через resource.AddFile; пока файла нет на клиенте — просто молчит.
-ix.celerity.SOUND_PATH = "afterlight/disciplines/celerity/celerity.mp3"
+ix.celerity.SOUND_PATH = "afterlight/disciplines/celerity/celerity.wav"
 
 -- Громкость звука Стремительности (0..1) — крутить здесь.
 ix.celerity.SOUND_VOLUME = 0.9

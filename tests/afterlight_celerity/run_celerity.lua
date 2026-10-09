@@ -430,7 +430,7 @@ local playedFiles = {}
 local loopChannel = nil
 sound = {PlayFile = function(path, flags, cb)
 	playedFiles[#playedFiles + 1] = path
-	if (path:find("celerity.mp3", 1, true)) then
+	if (path:find("celerity.wav", 1, true)) then
 		loopChannel = {
 			flags = flags, volume = 0, stopped = false,
 			Play = function(self) self.playing = true end,
@@ -462,7 +462,7 @@ client.nw2["afterlightCelerityEnd"] = 1e9
 client.nw2["afterlightCeleritySprint"] = false
 for _ = 1, 30 do realTime = realTime + 0.05; currentTime = currentTime + 0.05; fxHook() end
 check(ix.celerity.fx.alpha == 1 and rectDraws > 0, "аура: плавно появляется за 1 секунду и рисуется")
-check(loopChannel ~= nil and loopChannel.playing, "звук: celerity.mp3 играет с активации (уже на 2-м уровне)")
+check(loopChannel ~= nil and loopChannel.playing, "звук: celerity.wav играет с активации (уже на 2-м уровне)")
 local trailHook = hookStore["PostDrawTranslucentRenderables"]
 check(trailHook ~= nil, "трейл: 3D-хук ленты позвоночника зарегистрирован")
 if (trailHook) then trailHook() end
@@ -513,7 +513,7 @@ check(ix.celerity.fx.alpha == 0, "аура: плавно гаснет за 1 с�
 local drawsAfter = rectDraws
 fxHook()
 check(rectDraws == drawsAfter, "аура: после затухания не рисуется")
-check(loopChannel.stopped == true, "звук: дисциплина кончилась — celerity.mp3 остановлен")
+check(loopChannel.stopped == true, "звук: дисциплина кончилась — celerity.wav остановлен")
 
 -- ===== Итог =====
 io.write(string.format("Проверок Стремительности: %d, провалено: %d\n", checks, failures))
