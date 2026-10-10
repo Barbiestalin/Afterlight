@@ -59,3 +59,7 @@ echo "### Стенд Могущества ($LUAJIT)"
 echo
 echo "### Стенд Стремительности ($LUAJIT)"
 "$LUAJIT" "$ROOT/tests/afterlight_celerity/run_celerity.lua"
+
+echo
+echo "### Стенд Стойкости ($LUAJIT)"
+"$LUAJIT" "$ROOT/tests/afterlight_fortitude/run_fortitude.lua"

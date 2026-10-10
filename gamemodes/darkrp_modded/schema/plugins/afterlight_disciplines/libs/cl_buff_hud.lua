@@ -44,6 +44,16 @@ local buffEntries = {
 		end
 	},
 	{
+		icon = "afterlight/disciplines/icons/fortitude.png",
+		GetRemaining = function(client)
+			local level = client:GetNW2Int("afterlightFortitudeLevel", 0)
+			local ends = client:GetNW2Float("afterlightFortitudeEnd", 0)
+			if (level > 0 and ends > CurTime()) then
+				return ends - CurTime(), "Стойкость " .. level
+			end
+		end
+	},
+	{
 		icon = "afterlight/disciplines/icons/vampire_abilities.png",
 		GetRemaining = function(client)
 			local ends = client:GetNW2Float("afterlightBloodBuffEnd", 0)
